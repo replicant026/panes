@@ -181,8 +181,33 @@ export function ModelPicker({
   // Active engine in popover (for browsing)
   const browsingEngine = engines.find((e) => e.id === activeEngineId) ?? engines[0];
   const browsingModels = browsingEngine?.models ?? [];
-  const activeModels = browsingModels.filter((m) => !m.hidden && m.isEnabled !== false);
-  const legacyModels = browsingModels.filter((m) => m.hidden && m.isEnabled !== false);
+  const modelRows = browsingModels.map((model) => {
+    const preference = getModelPickerPreference(activeEngineId, model.id);
+    const isEnabled = model.isEnabled !== false && preference.enabled !== false;
+    return {
+      model,
+      preference,
+      isEnabled,
+      isHidden: model.hidden === true,
+      isFavorite: preference.favorite === true,
+    };
+  });
+
+  const favoriteModels = modelRows
+    .filter((row) => !row.isHidden && row.isEnabled && row.isFavorite)
+    .map((row) => row.model);
+
+  const activeModels = modelRows
+    .filter((row) => !row.isHidden && row.isEnabled && !row.isFavorite)
+    .map((row) => row.model);
+
+  const inactiveModels = modelRows
+    .filter((row) => !row.isHidden && !row.isEnabled)
+    .map((row) => row.model);
+
+  const legacyModels = modelRows
+    .filter((row) => row.isHidden && row.isEnabled)
+    .map((row) => row.model);
 
   function handleModelSelect(engineId: string, modelId: string) {
     onEngineModelChange(engineId, modelId);
