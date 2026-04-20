@@ -550,7 +550,7 @@ export interface ThreadUpdatedEvent {
 export interface ChatTurnFinishedEvent {
   threadId: string;
   workspaceId: string;
-  engineId: "codex" | "claude";
+  engineId: "codex" | "claude" | "opencode";
   threadTitle: string;
   status: "completed" | "interrupted" | "error";
   preview?: string | null;

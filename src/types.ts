@@ -154,7 +154,7 @@ export interface Thread {
   id: string;
   workspaceId: string;
   repoId: string | null;
-  engineId: "codex" | "claude";
+  engineId: "codex" | "claude" | "opencode";
   modelId: string;
   engineThreadId: string | null;
   engineMetadata?: Record<string, unknown>;
@@ -986,7 +986,7 @@ export interface TerminalGroup {
 // ── Setup / Onboarding ──────────────────────────────────────────────
 
 export type OnboardingWorkflowPreference = "cli" | "chat";
-export type OnboardingChatEngineId = "codex" | "claude";
+export type OnboardingChatEngineId = "codex" | "claude" | "opencode";
 export type OnboardingStep =
   | "greeting"
   | "workflow"
