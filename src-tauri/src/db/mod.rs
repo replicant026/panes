@@ -14,6 +14,7 @@ use crate::{path_utils, runtime_env};
 
 pub mod actions;
 pub mod messages;
+pub mod model_preferences;
 pub mod repos;
 pub mod threads;
 pub mod workspaces;
@@ -129,6 +130,7 @@ impl Database {
         ensure_workspace_startup_columns(&conn)?;
         ensure_runtime_columns(&conn)?;
         ensure_messages_audit_columns(&conn)?;
+        ensure_model_preferences_table(&conn)?;
         repair_normalized_workspace_and_repo_paths(&mut conn)?;
         Ok(())
     }
@@ -221,6 +223,25 @@ fn ensure_messages_audit_columns(conn: &Connection) -> anyhow::Result<()> {
         .context("failed to add messages.turn_reasoning_effort column")?;
     }
 
+    Ok(())
+}
+
+fn ensure_model_preferences_table(conn: &Connection) -> anyhow::Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS model_preferences (
+            workspace_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            engine_id TEXT NOT NULL,
+            model_id TEXT NOT NULL,
+            is_favorite INTEGER NOT NULL DEFAULT 0,
+            is_enabled INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (workspace_id, user_id, engine_id, model_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_model_preferences_workspace_user
+            ON model_preferences(workspace_id, user_id);",
+    )
+    .context("failed to ensure model_preferences table")?;
     Ok(())
 }
 

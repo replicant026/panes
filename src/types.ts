@@ -446,6 +446,8 @@ export interface EngineModel {
   displayName: string;
   description: string;
   hidden: boolean;
+  isFavorite?: boolean;
+  isEnabled?: boolean;
   isDefault: boolean;
   upgrade?: string;
   availabilityNux?: EngineModelAvailabilityNux;
@@ -454,6 +456,16 @@ export interface EngineModel {
   supportsPersonality: boolean;
   defaultReasoningEffort: string;
   supportedReasoningEfforts: ReasoningEffortOption[];
+}
+
+export interface ModelPreference {
+  workspaceId: string;
+  userId: string;
+  engineId: string;
+  modelId: string;
+  isFavorite: boolean;
+  isEnabled: boolean;
+  updatedAt: string;
 }
 
 export interface EngineModelAvailabilityNux {

@@ -39,6 +39,7 @@ export interface OnboardingShortcutTargetNode {
 interface OnboardingChatModelSelection {
   id: string;
   hidden: boolean;
+  isEnabled?: boolean;
   isDefault: boolean;
 }
 
@@ -95,7 +96,7 @@ export function resolvePreferredOnboardingChatSelection(
 
   const model =
     engine.models.find((candidate) => candidate.isDefault) ??
-    engine.models.find((candidate) => !candidate.hidden) ??
+    engine.models.find((candidate) => !candidate.hidden && candidate.isEnabled !== false) ??
     engine.models[0];
   if (!model) {
     return null;

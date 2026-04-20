@@ -39,6 +39,7 @@ import type {
   PowerSettings,
   PowerSettingsInput,
   Message,
+  ModelPreference,
   MessageWindow,
   MessageWindowCursor,
   ReadFileResult,
@@ -276,6 +277,27 @@ export const ipc = {
   listCodexSkills: (cwd: string) =>
     invoke<CodexSkill[]>("list_codex_skills", { cwd }),
   listCodexApps: () => invoke<CodexApp[]>("list_codex_apps"),
+  getModelPreferences: (workspaceId: string, userId?: string | null) =>
+    invoke<ModelPreference[]>("get_model_preferences", {
+      workspaceId,
+      userId: userId ?? null,
+    }),
+  saveModelPreference: (
+    workspaceId: string,
+    engineId: string,
+    modelId: string,
+    isFavorite: boolean,
+    isEnabled: boolean,
+    userId?: string | null,
+  ) =>
+    invoke<ModelPreference>("save_model_preference", {
+      workspaceId,
+      engineId,
+      modelId,
+      isFavorite,
+      isEnabled,
+      userId: userId ?? null,
+    }),
   sendMessage: (
     threadId: string,
     message: string,

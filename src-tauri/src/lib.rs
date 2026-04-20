@@ -274,6 +274,8 @@ pub fn run() {
             commands::engines::list_codex_skills,
             commands::engines::list_codex_apps,
             commands::engines::run_engine_check,
+            commands::engines::get_model_preferences,
+            commands::engines::save_model_preference,
             commands::threads::list_threads,
             commands::threads::list_archived_threads,
             commands::threads::list_codex_remote_threads,

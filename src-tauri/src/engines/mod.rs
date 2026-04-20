@@ -802,6 +802,8 @@ fn map_model_info(model: ModelInfo) -> EngineModelDto {
         display_name: model.display_name,
         description: model.description,
         hidden: model.hidden,
+        is_favorite: false,
+        is_enabled: true,
         is_default: model.is_default,
         upgrade: model.upgrade,
         availability_nux: model
