@@ -14,7 +14,7 @@
       },
       "chat": {
         "title": "Chat com Codex / Claude",
-        "description": "Escolha Codex, Claude ou os dois. O Panes verifica o que está pronto, ajuda a instalar o que faltar e depois leva você para um workspace."
+        "description": "Escolha Codex, OpenCode, Claude ou qualquer combinação. O Panes verifica o que está pronto, ajuda a instalar o que faltar e depois leva você para um workspace."
       }
     }
   },
@@ -27,10 +27,13 @@
   "chatEngines": {
     "title": "Escolha seus harnesses de chat",
     "subtitle": "Selecione quais harnesses você quer deixar prontos dentro do chat do Panes.",
-    "helper": "Você pode selecionar Codex, Claude ou os dois. Se escolher os dois, o próximo passo verifica os dois runtimes antes de continuar.",
+    "helper": "Você pode selecionar Codex, OpenCode, Claude ou qualquer combinação. O próximo passo verifica cada runtime selecionado antes de continuar.",
     "options": {
       "codex": {
         "description": "Chat via Codex App Server. Pode instalar Node.js e Codex CLI se estiverem ausentes."
+      },
+      "opencode": {
+        "description": "Chat via OpenCode. Pode instalar Node.js e OpenCode CLI se estiverem ausentes."
       },
       "claude": {
         "description": "Chat via Claude Agent SDK. Não exige instalar a Claude CLI separadamente."
@@ -51,6 +54,8 @@
     "nodeInstallManual": "Node.js está ausente. Instale manualmente o Node.js 20+ e depois atualize a verificação.",
     "codexInstallAvailable": "Codex CLI está ausente. O Panes pode instalar automaticamente para o engine de chat do Codex.",
     "codexInstallManual": "Codex CLI está ausente. Instale manualmente e depois atualize a verificação.",
+    "opencodeInstallAvailable": "OpenCode CLI está ausente. Instale com `npm install -g opencode-ai` e depois atualize a verificação.",
+    "opencodeInstallManual": "OpenCode CLI está ausente. Instale `npm install -g opencode-ai` e depois atualize a verificação.",
     "deps": {
       "node": "Node.js"
     },
