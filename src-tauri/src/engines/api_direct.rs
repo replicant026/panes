@@ -371,11 +371,153 @@ impl OpenCodeEngine {
     }
 
     pub async fn list_models_runtime(&self) -> Vec<ModelInfo> {
-        self.models()
+        match self.fetch_runtime_models().await {
+            Ok(models) => models,
+            Err(_) => self.models(),
+        }
     }
 
     pub async fn runtime_model_fallback(&self) -> Vec<ModelInfo> {
         self.models()
+    }
+
+    async fn fetch_runtime_models(&self) -> anyhow::Result<Vec<ModelInfo>> {
+        let executable = runtime_env::resolve_executable("opencode")
+            .context("`opencode` executable not found in PATH")?;
+
+        let output = Command::new(&executable)
+            .args(["--json", "models"])
+            .output()
+            .await
+            .with_context(|| format!("failed to execute {}", executable.display()))?;
+
+        if !output.status.success() {
+            anyhow::bail!(
+                "opencode model listing failed with status {}",
+                output.status
+            );
+        }
+
+        parse_opencode_model_list(&output.stdout)
+    }
+}
+
+fn parse_opencode_model_list(stdout: &[u8]) -> anyhow::Result<Vec<ModelInfo>> {
+    let payload: Value = serde_json::from_slice(stdout).context("invalid opencode models json")?;
+
+    let models = if let Some(models) = payload.as_array() {
+        models
+    } else if let Some(models) = payload.get("data").and_then(Value::as_array) {
+        models
+    } else if let Some(models) = payload.get("models").and_then(Value::as_array) {
+        models
+    } else {
+        anyhow::bail!("opencode models payload missing model array")
+    };
+
+    Ok(models.iter().map(map_opencode_model).collect())
+}
+
+fn map_opencode_model(value: &Value) -> ModelInfo {
+    let id = value
+        .get("id")
+        .or_else(|| value.get("name"))
+        .and_then(Value::as_str)
+        .unwrap_or("opencode-default")
+        .to_string();
+
+    let default_reasoning_effort = value
+        .get("defaultReasoningEffort")
+        .or_else(|| value.get("default_reasoning_effort"))
+        .and_then(Value::as_str)
+        .unwrap_or("medium")
+        .to_string();
+
+    let supported_reasoning_efforts = value
+        .get("supportedReasoningEfforts")
+        .or_else(|| value.get("supported_reasoning_efforts"))
+        .and_then(Value::as_array)
+        .map(|options| {
+            options
+                .iter()
+                .filter_map(|option| {
+                    if let Some(reasoning_effort) = option.as_str() {
+                        return Some(super::ReasoningEffortOption {
+                            reasoning_effort: reasoning_effort.to_string(),
+                            description: format!("{reasoning_effort} reasoning effort"),
+                        });
+                    }
+
+                    let reasoning_effort = option
+                        .get("reasoningEffort")
+                        .or_else(|| option.get("reasoning_effort"))
+                        .and_then(Value::as_str)?;
+                    let description = option
+                        .get("description")
+                        .and_then(Value::as_str)
+                        .unwrap_or(reasoning_effort);
+
+                    Some(super::ReasoningEffortOption {
+                        reasoning_effort: reasoning_effort.to_string(),
+                        description: description.to_string(),
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .filter(|items| !items.is_empty())
+        .unwrap_or_else(|| {
+            vec![super::ReasoningEffortOption {
+                reasoning_effort: default_reasoning_effort.clone(),
+                description: format!("{default_reasoning_effort} reasoning effort"),
+            }]
+        });
+
+    ModelInfo {
+        display_name: value
+            .get("displayName")
+            .or_else(|| value.get("display_name"))
+            .and_then(Value::as_str)
+            .unwrap_or(&id)
+            .to_string(),
+        description: value
+            .get("description")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        hidden: value
+            .get("hidden")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        is_default: value
+            .get("isDefault")
+            .or_else(|| value.get("is_default"))
+            .or_else(|| value.get("default"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        upgrade: None,
+        availability_nux: None,
+        upgrade_info: None,
+        input_modalities: value
+            .get("inputModalities")
+            .or_else(|| value.get("input_modalities"))
+            .and_then(Value::as_array)
+            .map(|modalities| {
+                modalities
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .filter(|modalities| !modalities.is_empty())
+            .unwrap_or_else(|| vec!["text".to_string()]),
+        supports_personality: value
+            .get("supportsPersonality")
+            .or_else(|| value.get("supports_personality"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        default_reasoning_effort,
+        supported_reasoning_efforts,
+        id,
     }
 }
 
@@ -737,5 +879,53 @@ mod tests {
             .await
             .expect("approval response");
         engine.interrupt("thread-1").await.expect("interrupt");
+    }
+
+    #[tokio::test]
+    async fn list_models_runtime_maps_multiple_models_and_flags() {
+        let _guard = env_lock().lock().expect("env lock poisoned");
+        let _path_guard = install_stub_opencode(
+            "#!/bin/sh\nif [ \"$1\" = \"--json\" ] && [ \"$2\" = \"models\" ]; then\ncat <<'JSON'\n{\"data\":[{\"id\":\"openai/gpt-5\",\"displayName\":\"GPT-5\",\"description\":\"default\",\"isDefault\":true,\"hidden\":false,\"defaultReasoningEffort\":\"high\",\"supportedReasoningEfforts\":[{\"reasoningEffort\":\"low\",\"description\":\"Fast\"},{\"reasoningEffort\":\"high\",\"description\":\"Deep\"}]},{\"id\":\"openai/gpt-5-mini\",\"displayName\":\"GPT-5 mini\",\"hidden\":true,\"default\":false,\"default_reasoning_effort\":\"medium\",\"supported_reasoning_efforts\":[\"minimal\",\"medium\"]}]}\nJSON\nexit 0\nfi\nexit 1\n",
+        )
+        .expect("stub binary");
+
+        let engine = OpenCodeEngine::default();
+        let models = engine.list_models_runtime().await;
+
+        assert_eq!(models.len(), 2);
+        assert_eq!(models[0].id, "openai/gpt-5");
+        assert!(models[0].is_default);
+        assert!(!models[0].hidden);
+        assert_eq!(models[0].default_reasoning_effort, "high");
+        assert_eq!(models[0].supported_reasoning_efforts.len(), 2);
+        assert_eq!(
+            models[0].supported_reasoning_efforts[1].reasoning_effort,
+            "high"
+        );
+
+        assert_eq!(models[1].id, "openai/gpt-5-mini");
+        assert!(!models[1].is_default);
+        assert!(models[1].hidden);
+        assert_eq!(models[1].default_reasoning_effort, "medium");
+        assert_eq!(
+            models[1]
+                .supported_reasoning_efforts
+                .iter()
+                .map(|option| option.reasoning_effort.as_str())
+                .collect::<Vec<_>>(),
+            vec!["minimal", "medium"]
+        );
+    }
+
+    #[tokio::test]
+    async fn list_models_runtime_falls_back_to_static_models_on_failure() {
+        let _guard = env_lock().lock().expect("env lock poisoned");
+        let _path_guard = install_stub_opencode("#!/bin/sh\nexit 1\n").expect("stub binary");
+
+        let engine = OpenCodeEngine::default();
+        let models = engine.list_models_runtime().await;
+
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].id, "opencode-default");
     }
 }
