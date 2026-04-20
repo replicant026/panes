@@ -17,7 +17,7 @@ pub struct OpenCodeEngine {
 impl Default for OpenCodeEngine {
     fn default() -> Self {
         Self {
-            inner: Arc::new(CodexEngine::default()),
+            inner: Arc::new(CodexEngine::for_opencode()),
         }
     }
 }
@@ -28,11 +28,7 @@ impl OpenCodeEngine {
     }
 
     pub async fn health_report(&self) -> CodexHealthReport {
-        let mut report = self.inner.health_report().await;
-        if let Some(details) = report.details.as_ref() {
-            report.details = Some(details.replace("`codex`", "`opencode`"));
-        }
-        report
+        self.inner.health_report().await
     }
 
     pub async fn list_models_runtime(&self) -> Vec<ModelInfo> {
