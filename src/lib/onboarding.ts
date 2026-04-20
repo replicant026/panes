@@ -170,6 +170,14 @@ export function isChatEngineReady(
     );
   }
 
+  if (engineId === "opencode") {
+    return Boolean(
+      dependencyReport?.node.found &&
+        dependencyReport.codex.found &&
+        (engineHealth.opencode?.available || isCodexAuthDeferred(engineHealth.opencode)),
+    );
+  }
+
   return engineHealth.claude?.available ?? false;
 }
 

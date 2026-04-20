@@ -69,8 +69,22 @@ const CHAT_ENGINE_OPTIONS: Array<{
   descriptionKey: string;
 }> = [
   { id: "codex", descriptionKey: "chatEngines.options.codex.description" },
+  { id: "opencode", descriptionKey: "chatEngines.options.opencode.description" },
   { id: "claude", descriptionKey: "chatEngines.options.claude.description" },
 ];
+
+function getChatEngineDisplayName(id: OnboardingChatEngineId): string {
+  switch (id) {
+    case "codex":
+      return "Codex";
+    case "opencode":
+      return "OpenCode";
+    case "claude":
+      return "Claude";
+    default:
+      return id;
+  }
+}
 
 const STEP_TITLES: Record<
   OnboardingStep,
@@ -355,7 +369,7 @@ function ChatEngineCard({
       </div>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)", marginBottom: 3 }}>
-          {id === "codex" ? "Codex" : "Claude"}
+          {getChatEngineDisplayName(id)}
         </div>
         <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: "var(--text-3)" }}>
           {description}
@@ -571,7 +585,7 @@ function ReadinessEngineRow({
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {getHarnessIcon(engineId, 22)}
           <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)" }}>
-            {engineId === "codex" ? "Codex" : "Claude"}
+            {getChatEngineDisplayName(engineId)}
           </span>
         </div>
         <span
@@ -760,10 +774,11 @@ export function OnboardingWizard() {
     readiness.error,
   );
   const codexAuthDeferred =
-    selectedChatEngines.includes("codex") &&
+    (selectedChatEngines.includes("codex") || selectedChatEngines.includes("opencode")) &&
     readiness.dependencyReport?.node.found === true &&
     readiness.dependencyReport.codex.found === true &&
-    isCodexAuthDeferred(readiness.engineHealth.codex);
+    (isCodexAuthDeferred(readiness.engineHealth.codex) ||
+      isCodexAuthDeferred(readiness.engineHealth.opencode));
   const busy = Boolean(installing) || workspaceLoading;
   const workspaceConfirmed =
     selectedWorkspaceId !== null && confirmedWorkspaceId === selectedWorkspaceId;
@@ -1279,21 +1294,38 @@ export function OnboardingWizard() {
                     />
                   ) : null}
 
-                  {selectedChatEngines.includes("codex") &&
+                  {(selectedChatEngines.includes("codex") ||
+                    selectedChatEngines.includes("opencode")) &&
                   readiness.dependencyReport &&
                   !readiness.dependencyReport.codex.found ? (
                     <ReadinessDependencyCard
-                      label="Codex CLI"
-                      description={
-                        readiness.dependencyReport.codex.canAutoInstall
-                          ? t("setup:chatReadiness.codexInstallAvailable")
-                          : t("setup:chatReadiness.codexInstallManual")
+                      label={
+                        selectedChatEngines.includes("codex") && selectedChatEngines.includes("opencode")
+                          ? "Codex CLI / OpenCode CLI"
+                          : selectedChatEngines.includes("opencode")
+                            ? "OpenCode CLI"
+                            : "Codex CLI"
                       }
-                      command="npm install -g @openai/codex"
+                      description={
+                        selectedChatEngines.includes("opencode")
+                          ? readiness.dependencyReport.codex.canAutoInstall
+                            ? t("setup:chatReadiness.opencodeInstallAvailable")
+                            : t("setup:chatReadiness.opencodeInstallManual")
+                          : readiness.dependencyReport.codex.canAutoInstall
+                            ? t("setup:chatReadiness.codexInstallAvailable")
+                            : t("setup:chatReadiness.codexInstallManual")
+                      }
+                      command={
+                        selectedChatEngines.includes("opencode")
+                          ? "npm install -g opencode-ai"
+                          : "npm install -g @openai/codex"
+                      }
                       disabled={Boolean(installing)}
                       installing={installing?.kind === "dependency" && installing.id === "codex"}
                       onInstall={
-                        readiness.dependencyReport.codex.canAutoInstall && readiness.dependencyReport.codex.installMethod
+                        selectedChatEngines.includes("codex") &&
+                        readiness.dependencyReport.codex.canAutoInstall &&
+                        readiness.dependencyReport.codex.installMethod
                           ? () => void handleInstallCodex()
                           : undefined
                       }

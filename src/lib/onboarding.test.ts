@@ -158,6 +158,52 @@ describe("onboarding helpers", () => {
     ).toBe(true);
   });
 
+  it("treats OpenCode readiness with explicit dependency and health checks", () => {
+    expect(
+      isChatWorkflowReady(["opencode"], readyDependencies, {
+        opencode: {
+          id: "opencode",
+          available: true,
+          warnings: [],
+          checks: [],
+          fixes: [],
+        },
+      }),
+    ).toBe(true);
+
+    expect(
+      isChatWorkflowReady(["opencode"], readyDependencies, {
+        opencode: {
+          id: "opencode",
+          available: false,
+          details: "Authentication required: not logged in",
+          warnings: [],
+          checks: [],
+          fixes: [],
+        },
+      }),
+    ).toBe(true);
+
+    expect(
+      isChatWorkflowReady(
+        ["opencode"],
+        {
+          ...readyDependencies,
+          codex: { ...readyDependencies.codex, found: false },
+        },
+        {
+          opencode: {
+            id: "opencode",
+            available: true,
+            warnings: [],
+            checks: [],
+            fixes: [],
+          },
+        },
+      ),
+    ).toBe(false);
+  });
+
   it("treats Codex auth failures as non-blocking for onboarding when the CLI is installed", () => {
     const authBlockedHealth = {
       id: "codex",
