@@ -39,6 +39,8 @@ export interface OnboardingShortcutTargetNode {
 interface OnboardingChatModelSelection {
   id: string;
   hidden: boolean;
+  isEnabled?: boolean;
+  isFavorite?: boolean;
   isDefault: boolean;
 }
 
@@ -93,9 +95,21 @@ export function resolvePreferredOnboardingChatSelection(
     return null;
   }
 
+  const isVisible = (candidate: OnboardingChatModelSelection): boolean => !candidate.hidden;
+  const isEnabled = (candidate: OnboardingChatModelSelection): boolean =>
+    candidate.isEnabled !== false;
+  const isActive = (candidate: OnboardingChatModelSelection): boolean =>
+    isVisible(candidate) && isEnabled(candidate);
+
   const model =
+    engine.models.find((candidate) => isActive(candidate) && candidate.isFavorite) ??
+    engine.models.find((candidate) => isActive(candidate) && candidate.isDefault) ??
+    engine.models.find((candidate) => isActive(candidate)) ??
+    engine.models.find((candidate) => isVisible(candidate) && candidate.isFavorite) ??
+    engine.models.find((candidate) => isVisible(candidate) && candidate.isDefault) ??
+    engine.models.find((candidate) => isVisible(candidate)) ??
+    engine.models.find((candidate) => candidate.isFavorite) ??
     engine.models.find((candidate) => candidate.isDefault) ??
-    engine.models.find((candidate) => !candidate.hidden) ??
     engine.models[0];
   if (!model) {
     return null;
