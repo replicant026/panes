@@ -173,7 +173,7 @@ export function isChatEngineReady(
   if (engineId === "opencode") {
     return Boolean(
       dependencyReport?.node.found &&
-        dependencyReport.codex.found &&
+        dependencyReport.opencode.found &&
         (engineHealth.opencode?.available || isCodexAuthDeferred(engineHealth.opencode)),
     );
   }
