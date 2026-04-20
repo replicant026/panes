@@ -12,6 +12,7 @@ use crate::{
     engines::{
         claude_sidecar::ClaudeSidecarEngine,
         codex::{CodexEngine, CodexForkedThread, CodexReviewStarted},
+        opencode::OpenCodeEngine,
     },
     models::{
         CodexAppDto, CodexSkillDto, EngineCapabilitiesDto, EngineHealthDto, EngineInfoDto,
@@ -27,6 +28,7 @@ pub mod codex_event_mapper;
 pub mod codex_protocol;
 pub mod codex_transport;
 pub mod events;
+pub mod opencode;
 
 pub use codex::CodexRuntimeEvent;
 pub use events::*;
@@ -114,9 +116,16 @@ const CLAUDE_CAPABILITIES: EngineCapabilities = EngineCapabilities {
     approval_decisions: &["accept", "decline", "accept_for_session"],
 };
 
+const OPENCODE_CAPABILITIES: EngineCapabilities = EngineCapabilities {
+    permission_modes: &["untrusted", "on-failure", "on-request", "never"],
+    sandbox_modes: &["read-only", "workspace-write", "danger-full-access"],
+    approval_decisions: &["accept", "decline", "cancel", "accept_for_session"],
+};
+
 pub fn capabilities_for_engine(engine_id: &str) -> EngineCapabilities {
     match engine_id {
         "claude" => CLAUDE_CAPABILITIES,
+        "opencode" => OPENCODE_CAPABILITIES,
         _ => CODEX_CAPABILITIES,
     }
 }
@@ -207,7 +216,7 @@ pub fn approval_response_route_for_engine(
     details: &Value,
 ) -> Option<ApprovalRequestRoute> {
     match engine_id {
-        "codex" => codex_event_mapper::extract_persisted_approval_route(details),
+        "codex" | "opencode" => codex_event_mapper::extract_persisted_approval_route(details),
         _ => None,
     }
 }
@@ -346,6 +355,7 @@ pub trait Engine: Send + Sync {
 
 pub struct EngineManager {
     codex: Arc<CodexEngine>,
+    opencode: Arc<OpenCodeEngine>,
     claude: Arc<ClaudeSidecarEngine>,
 }
 
@@ -353,6 +363,7 @@ impl EngineManager {
     pub fn new() -> Self {
         Self {
             codex: Arc::new(CodexEngine::default()),
+            opencode: Arc::new(OpenCodeEngine::default()),
             claude: Arc::new(ClaudeSidecarEngine::default()),
         }
     }
@@ -374,6 +385,20 @@ impl EngineManager {
             }
         };
         let claude_models = self.claude.models();
+        let opencode_models = match timeout(
+            Duration::from_secs(4),
+            self.opencode.list_models_runtime(),
+        )
+        .await
+        {
+            Ok(models) => models,
+            Err(_) => {
+                log::warn!(
+                        "timed out loading opencode runtime models; falling back to cached or static model catalog"
+                    );
+                self.opencode.runtime_model_fallback().await
+            }
+        };
 
         Ok(vec![
             EngineInfoDto {
@@ -381,6 +406,12 @@ impl EngineManager {
                 name: self.codex.name().to_string(),
                 models: codex_models.into_iter().map(map_model_info).collect(),
                 capabilities: map_engine_capabilities(capabilities_for_engine(self.codex.id())),
+            },
+            EngineInfoDto {
+                id: self.opencode.id().to_string(),
+                name: self.opencode.name().to_string(),
+                models: opencode_models.into_iter().map(map_model_info).collect(),
+                capabilities: map_engine_capabilities(capabilities_for_engine(self.opencode.id())),
             },
             EngineInfoDto {
                 id: self.claude.id().to_string(),
@@ -419,6 +450,19 @@ impl EngineManager {
                     protocol_diagnostics: None,
                 })
             }
+            "opencode" => {
+                let report = self.opencode.health_report().await;
+                Ok(EngineHealthDto {
+                    id: "opencode".to_string(),
+                    available: report.available,
+                    version: report.version,
+                    details: report.details,
+                    warnings: report.warnings,
+                    checks: report.checks,
+                    fixes: report.fixes,
+                    protocol_diagnostics: report.protocol_diagnostics,
+                })
+            }
             _ => anyhow::bail!("unknown engine: {engine_id}"),
         }
     }
@@ -426,6 +470,7 @@ impl EngineManager {
     pub async fn prewarm(&self, engine_id: &str) -> anyhow::Result<()> {
         match engine_id {
             "codex" => self.codex.prewarm().await,
+            "opencode" => self.opencode.prewarm().await,
             "claude" => self.claude.prewarm().await,
             _ => anyhow::bail!("unknown engine: {engine_id}"),
         }
@@ -533,6 +578,11 @@ impl EngineManager {
                 .start_thread(scope, resume_id, effective_model_id, sandbox)
                 .await
                 .context("failed to start claude thread")?,
+            "opencode" => self
+                .opencode
+                .start_thread(scope, resume_id, effective_model_id, sandbox)
+                .await
+                .context("failed to start opencode thread")?,
             _ => anyhow::bail!("unsupported engine_id {}", thread.engine_id),
         };
 
@@ -558,6 +608,11 @@ impl EngineManager {
                 .send_message(engine_thread_id, input, event_tx, cancellation)
                 .await
                 .context("claude send_message failed"),
+            "opencode" => self
+                .opencode
+                .send_message(engine_thread_id, input, event_tx, cancellation)
+                .await
+                .context("opencode send_message failed"),
             _ => anyhow::bail!("unsupported engine_id {}", thread.engine_id),
         }
     }
@@ -579,6 +634,11 @@ impl EngineManager {
                 .steer_message(engine_thread_id, input)
                 .await
                 .context("claude steer_message failed"),
+            "opencode" => self
+                .opencode
+                .steer_message(engine_thread_id, input)
+                .await
+                .context("opencode steer_message failed"),
             _ => anyhow::bail!("unsupported engine_id {}", thread.engine_id),
         }
     }
@@ -601,6 +661,11 @@ impl EngineManager {
                     .respond_to_approval(approval_id, response, route)
                     .await
             }
+            "opencode" => {
+                self.opencode
+                    .respond_to_approval(approval_id, response, route)
+                    .await
+            }
             _ => anyhow::bail!("unsupported engine_id {}", thread.engine_id),
         }
     }
@@ -610,6 +675,7 @@ impl EngineManager {
         match thread.engine_id.as_str() {
             "codex" => self.codex.interrupt(engine_thread_id).await,
             "claude" => self.claude.interrupt(engine_thread_id).await,
+            "opencode" => self.opencode.interrupt(engine_thread_id).await,
             _ => anyhow::bail!("unsupported engine_id {}", thread.engine_id),
         }
     }
@@ -622,6 +688,7 @@ impl EngineManager {
         match thread.engine_id.as_str() {
             "codex" => self.codex.archive_thread(engine_thread_id).await,
             "claude" => self.claude.archive_thread(engine_thread_id).await,
+            "opencode" => self.opencode.archive_thread(engine_thread_id).await,
             _ => anyhow::bail!("unsupported engine_id {}", thread.engine_id),
         }
     }
@@ -634,6 +701,7 @@ impl EngineManager {
         match thread.engine_id.as_str() {
             "codex" => self.codex.unarchive_thread(engine_thread_id).await,
             "claude" => self.claude.unarchive_thread(engine_thread_id).await,
+            "opencode" => self.opencode.unarchive_thread(engine_thread_id).await,
             _ => anyhow::bail!("unsupported engine_id {}", thread.engine_id),
         }
     }
@@ -649,6 +717,7 @@ impl EngineManager {
     ) -> Option<String> {
         match thread.engine_id.as_str() {
             "codex" => self.codex.read_thread_preview(engine_thread_id).await,
+            "opencode" => None,
             _ => None,
         }
     }
@@ -662,6 +731,7 @@ impl EngineManager {
         match thread.engine_id.as_str() {
             "codex" => self.codex.set_thread_name(engine_thread_id, name).await,
             "claude" => Ok(()),
+            "opencode" => Ok(()),
             _ => anyhow::bail!("unsupported engine_id {}", thread.engine_id),
         }
     }
@@ -685,6 +755,7 @@ impl EngineManager {
                 .await
                 .map(Some),
             "claude" => Ok(None),
+            "opencode" => Ok(None),
             _ => anyhow::bail!("unsupported engine_id {}", thread.engine_id),
         }
     }
