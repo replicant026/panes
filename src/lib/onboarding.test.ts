@@ -224,7 +224,7 @@ describe("onboarding helpers", () => {
         ["opencode"],
         {
           ...readyDependencies,
-          codex: { ...readyDependencies.codex, found: false },
+          opencode: { ...readyDependencies.opencode, found: false },
         },
         {
           opencode: {
