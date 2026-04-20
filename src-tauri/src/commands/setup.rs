@@ -193,7 +193,6 @@ async fn detect_codex() -> DepStatus {
     }
 }
 
-
 async fn detect_opencode() -> DepStatus {
     if let Some(path) = runtime_env::resolve_executable("opencode") {
         if let Some(version) = get_command_version(&path, &["--version"]).await {

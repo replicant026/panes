@@ -24,6 +24,16 @@ use super::{
     ThreadScope, TurnCompletionStatus, TurnInput,
 };
 
+#[derive(Debug, Clone)]
+pub struct OpenCodeHealthReport {
+    pub available: bool,
+    pub version: Option<String>,
+    pub details: Option<String>,
+    pub warnings: Vec<String>,
+    pub checks: Vec<String>,
+    pub fixes: Vec<String>,
+}
+
 pub trait CliStreamParser: Send {
     fn parse_stdout_line(&mut self, line: &str) -> Vec<EngineEvent>;
     fn parse_stderr_line(&mut self, line: &str) -> Vec<EngineEvent>;
@@ -312,6 +322,63 @@ impl Default for OpenCodeEngine {
     }
 }
 
+impl OpenCodeEngine {
+    pub async fn prewarm(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    pub async fn health_report(&self) -> OpenCodeHealthReport {
+        let executable = runtime_env::resolve_executable("opencode");
+        let checks = vec![
+            "opencode executable on PATH".to_string(),
+            "opencode --version".to_string(),
+        ];
+        let fixes = vec!["Install OpenCode with `npm install -g opencode-ai`".to_string()];
+
+        let Some(executable_path) = executable else {
+            return OpenCodeHealthReport {
+                available: false,
+                version: None,
+                details: Some("`opencode` executable not found in PATH".to_string()),
+                warnings: Vec::new(),
+                checks,
+                fixes,
+            };
+        };
+
+        let version = tokio::process::Command::new(&executable_path)
+            .arg("--version")
+            .output()
+            .await
+            .ok()
+            .and_then(|output| {
+                if output.status.success() {
+                    Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+                } else {
+                    None
+                }
+            })
+            .filter(|value| !value.is_empty());
+
+        OpenCodeHealthReport {
+            available: version.is_some(),
+            version,
+            details: None,
+            warnings: Vec::new(),
+            checks,
+            fixes,
+        }
+    }
+
+    pub async fn list_models_runtime(&self) -> Vec<ModelInfo> {
+        self.models()
+    }
+
+    pub async fn runtime_model_fallback(&self) -> Vec<ModelInfo> {
+        self.models()
+    }
+}
+
 #[async_trait]
 impl Engine for OpenCodeEngine {
     fn id(&self) -> &str {
@@ -456,9 +523,64 @@ fn opencode_augmented_path(executable: &Path) -> Option<OsString> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::{
+        fs,
+        path::PathBuf,
+        sync::{Mutex, OnceLock},
+        time::{SystemTime, UNIX_EPOCH},
+    };
+    use tokio::sync::mpsc;
+    use tokio_util::sync::CancellationToken;
 
     const OPEN_CODE_EVENT_FIXTURE: &str =
         include_str!("../../../tests/fixtures/opencode/events.jsonl");
+
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    struct PathEnvGuard {
+        original_path: Option<std::ffi::OsString>,
+        temp_dir: PathBuf,
+    }
+
+    impl Drop for PathEnvGuard {
+        fn drop(&mut self) {
+            match &self.original_path {
+                Some(path) => std::env::set_var("PATH", path),
+                None => std::env::remove_var("PATH"),
+            }
+            let _ = fs::remove_dir_all(&self.temp_dir);
+        }
+    }
+
+    fn install_stub_opencode(bin_body: &str) -> anyhow::Result<PathEnvGuard> {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "panes-opencode-test-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system time after epoch")
+                .as_nanos()
+        ));
+        fs::create_dir_all(&temp_dir)?;
+        let binary = temp_dir.join("opencode");
+        fs::write(&binary, bin_body)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut permissions = fs::metadata(&binary)?.permissions();
+            permissions.set_mode(0o755);
+            fs::set_permissions(&binary, permissions)?;
+        }
+
+        let original_path = std::env::var_os("PATH");
+        std::env::set_var("PATH", &temp_dir);
+        Ok(PathEnvGuard {
+            original_path,
+            temp_dir,
+        })
+    }
 
     #[test]
     fn opencode_parser_maps_fixture_to_engine_events() {
@@ -507,5 +629,113 @@ mod tests {
         }
 
         assert!(!lifecycle.is_turn_active(thread_id));
+    }
+
+    #[tokio::test]
+    async fn health_report_detects_opencode_binary() {
+        let _guard = env_lock().lock().expect("env lock poisoned");
+        let _path_guard = install_stub_opencode("#!/bin/sh\necho 0.1.0\n").expect("stub binary");
+
+        let engine = OpenCodeEngine::default();
+        let report = engine.health_report().await;
+
+        assert!(report.available);
+        assert_eq!(report.version.as_deref(), Some("0.1.0"));
+    }
+
+    #[tokio::test]
+    async fn start_thread_uses_resume_id_when_present() {
+        let engine = OpenCodeEngine::default();
+        let thread = engine
+            .start_thread(
+                ThreadScope::Repo {
+                    repo_path: "/tmp/repo".to_string(),
+                },
+                Some("existing-thread"),
+                "opencode-default",
+                SandboxPolicy {
+                    writable_roots: Vec::new(),
+                    allow_network: false,
+                    approval_policy: None,
+                    reasoning_effort: None,
+                    sandbox_mode: None,
+                    service_tier: None,
+                    personality: None,
+                    output_schema: None,
+                },
+            )
+            .await
+            .expect("start thread");
+
+        assert_eq!(thread.engine_thread_id, "existing-thread");
+    }
+
+    #[tokio::test]
+    async fn send_message_streams_and_interrupts_on_cancellation() {
+        let _guard = env_lock().lock().expect("env lock poisoned");
+        let _path_guard = install_stub_opencode(
+            "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 0.1.0; exit 0; fi\nprintf '{\"event\":\"turn.started\"}\\n'\nsleep 2\nprintf '{\"event\":\"message.delta\",\"delta\":\"late\"}\\n'\n",
+        )
+        .expect("stub binary");
+
+        let engine = OpenCodeEngine::default();
+        let (tx, mut rx) = mpsc::channel(32);
+        let cancellation = CancellationToken::new();
+        let send_cancel = cancellation.clone();
+
+        let handle = tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+            send_cancel.cancel();
+        });
+
+        engine
+            .send_message(
+                "thread-cancel",
+                TurnInput {
+                    message: "hello".to_string(),
+                    attachments: Vec::new(),
+                    plan_mode: false,
+                    input_items: Vec::new(),
+                },
+                tx,
+                cancellation,
+            )
+            .await
+            .expect("send message");
+        handle.await.expect("canceller task");
+
+        let mut saw_turn_started = false;
+        let mut saw_interrupted_completion = false;
+        while let Ok(event) =
+            tokio::time::timeout(std::time::Duration::from_millis(50), rx.recv()).await
+        {
+            let Some(event) = event else { break };
+            if matches!(event, EngineEvent::TurnStarted { .. }) {
+                saw_turn_started = true;
+            }
+            if matches!(
+                event,
+                EngineEvent::TurnCompleted {
+                    status: TurnCompletionStatus::Interrupted,
+                    ..
+                }
+            ) {
+                saw_interrupted_completion = true;
+                break;
+            }
+        }
+
+        assert!(saw_turn_started);
+        assert!(saw_interrupted_completion);
+    }
+
+    #[tokio::test]
+    async fn approval_and_interrupt_are_noops_that_succeed() {
+        let engine = OpenCodeEngine::default();
+        engine
+            .respond_to_approval("approval-1", serde_json::json!({"decision":"accept"}), None)
+            .await
+            .expect("approval response");
+        engine.interrupt("thread-1").await.expect("interrupt");
     }
 }
