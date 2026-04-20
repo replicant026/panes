@@ -893,6 +893,7 @@ pub struct GitInitRepoStatusDto {
 pub struct DependencyReport {
     pub node: DepStatus,
     pub codex: DepStatus,
+    pub opencode: DepStatus,
     pub git: DepStatus,
     pub platform: String,
     pub package_managers: Vec<String>,

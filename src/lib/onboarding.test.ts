@@ -27,6 +27,13 @@ const readyDependencies: DependencyReport = {
     canAutoInstall: true,
     installMethod: "npm",
   },
+  opencode: {
+    found: true,
+    version: "0.1.0",
+    path: "/usr/local/bin/opencode",
+    canAutoInstall: true,
+    installMethod: "npm",
+  },
   git: {
     found: true,
     version: "2.48.0",
@@ -136,6 +143,34 @@ describe("onboarding helpers", () => {
       isChatWorkflowReady(["codex"], readyDependencies, {
         codex: {
           id: "codex",
+          available: false,
+          warnings: [],
+          checks: [],
+          fixes: [],
+        },
+      }),
+    ).toBe(false);
+  });
+
+
+
+  it("treats OpenCode as ready only when Node, OpenCode dependency, and engine health pass", () => {
+    expect(
+      isChatWorkflowReady(["opencode"], readyDependencies, {
+        opencode: {
+          id: "opencode",
+          available: true,
+          warnings: [],
+          checks: [],
+          fixes: [],
+        },
+      }),
+    ).toBe(true);
+
+    expect(
+      isChatWorkflowReady(["opencode"], readyDependencies, {
+        opencode: {
+          id: "opencode",
           available: false,
           warnings: [],
           checks: [],

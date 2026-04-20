@@ -37,6 +37,9 @@
       },
       "claude": {
         "description": "Chat powered by the Claude Agent SDK. Does not require installing the Claude CLI separately."
+      },
+      "opencode": {
+        "description": "Chat powered by OpenCode. May install Node.js and OpenCode CLI if they are missing."
       }
     }
   },
@@ -65,7 +68,9 @@
       "fixes": "Suggested next steps",
       "showNotes": "Show warnings",
       "hideNotes": "Hide warnings"
-    }
+    },
+    "opencodeInstallAvailable": "OpenCode CLI is missing. Panes can install it automatically for the OpenCode chat engine.",
+    "opencodeInstallManual": "OpenCode CLI is missing. Install it manually, then refresh the readiness check."
   },
   "workspace": {
     "title": "Confirm your first workspace",

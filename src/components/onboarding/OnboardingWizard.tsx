@@ -906,6 +906,15 @@ export function OnboardingWizard() {
     if (ok) await refreshReadiness();
   }
 
+  async function handleInstallOpenCode() {
+    if (installing) return;
+    const report = readiness.dependencyReport;
+    if (!report?.opencode.installMethod) return;
+    clearInstallState();
+    const ok = await installDependency("opencode", report.opencode.installMethod, "OpenCode CLI");
+    if (ok) await refreshReadiness();
+  }
+
   async function handleOpenWebsite(url: string) {
     try { await openExternal(url); } catch { /* best-effort */ }
   }
@@ -1243,7 +1252,7 @@ export function OnboardingWizard() {
               {/* ── Chat Engines ── */}
               {step === "chatEngines" ? (
                 <div style={{ display: "grid", gap: 10 }}>
-                  <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr" }}>
+                  <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
                     {CHAT_ENGINE_OPTIONS.map((engine, index) => (
                       <ChatEngineCard
                         key={engine.id}
@@ -1307,6 +1316,28 @@ export function OnboardingWizard() {
                       onInstall={
                         readiness.dependencyReport.codex.canAutoInstall && readiness.dependencyReport.codex.installMethod
                           ? () => void handleInstallCodex()
+                          : undefined
+                      }
+                    />
+                  ) : null}
+
+
+                  {selectedChatEngines.includes("opencode") &&
+                  readiness.dependencyReport &&
+                  !readiness.dependencyReport.opencode.found ? (
+                    <ReadinessDependencyCard
+                      label="OpenCode CLI"
+                      description={
+                        readiness.dependencyReport.opencode.canAutoInstall
+                          ? t("setup:chatReadiness.opencodeInstallAvailable")
+                          : t("setup:chatReadiness.opencodeInstallManual")
+                      }
+                      command="npm install -g opencode-ai"
+                      disabled={Boolean(installing)}
+                      installing={installing?.kind === "dependency" && installing.id === "opencode"}
+                      onInstall={
+                        readiness.dependencyReport.opencode.canAutoInstall && readiness.dependencyReport.opencode.installMethod
+                          ? () => void handleInstallOpenCode()
                           : undefined
                       }
                     />
