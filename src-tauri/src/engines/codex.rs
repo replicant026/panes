@@ -74,6 +74,7 @@ const TRANSPORT_RESTART_MAX_ATTEMPTS: usize = 3;
 const TRANSPORT_RESTART_BASE_BACKOFF: Duration = Duration::from_millis(250);
 const TRANSPORT_RESTART_MAX_BACKOFF: Duration = Duration::from_secs(2);
 const CODEX_MISSING_DEFAULT_DETAILS: &str = "`codex` executable not found in PATH";
+const OPENCODE_MISSING_DEFAULT_DETAILS: &str = "`opencode` executable not found in PATH";
 const MAX_ATTACHMENTS_PER_TURN: usize = 10;
 const MAX_ATTACHMENT_BYTES: u64 = 10 * 1024 * 1024;
 const MAX_TEXT_ATTACHMENT_CHARS: usize = 40_000;
@@ -82,6 +83,35 @@ const PLAN_MODE_PROMPT_PREFIX: &str = "Plan the solution first. Do not execute c
 pub struct CodexEngine {
     state: Arc<Mutex<CodexState>>,
     runtime_events: broadcast::Sender<CodexRuntimeEvent>,
+    config: CodexEngineConfig,
+}
+
+#[derive(Debug, Clone)]
+pub struct CodexEngineConfig {
+    pub executable_name: &'static str,
+    pub display_name: &'static str,
+    pub missing_default_details: &'static str,
+    pub npm_package: &'static str,
+}
+
+impl CodexEngineConfig {
+    pub fn codex() -> Self {
+        Self {
+            executable_name: "codex",
+            display_name: "Codex",
+            missing_default_details: CODEX_MISSING_DEFAULT_DETAILS,
+            npm_package: "@openai/codex",
+        }
+    }
+
+    pub fn opencode() -> Self {
+        Self {
+            executable_name: "opencode",
+            display_name: "OpenCode",
+            missing_default_details: OPENCODE_MISSING_DEFAULT_DETAILS,
+            npm_package: "opencode-ai",
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -131,11 +161,22 @@ struct CodexState {
 
 impl Default for CodexEngine {
     fn default() -> Self {
+        Self::with_config(CodexEngineConfig::codex())
+    }
+}
+
+impl CodexEngine {
+    pub fn with_config(config: CodexEngineConfig) -> Self {
         let (runtime_events, _) = broadcast::channel(256);
         Self {
             state: Arc::new(Mutex::new(CodexState::default())),
             runtime_events,
+            config,
         }
+    }
+
+    pub fn for_opencode() -> Self {
+        Self::with_config(CodexEngineConfig::opencode())
     }
 }
 
@@ -363,7 +404,7 @@ impl Engine for CodexEngine {
     }
 
     async fn is_available(&self) -> bool {
-        resolve_codex_executable().await.executable.is_some()
+        self.resolve_executable().await.executable.is_some()
     }
 
     async fn start_thread(
@@ -1652,7 +1693,7 @@ impl CodexEngine {
     }
 
     pub async fn health_report(&self) -> CodexHealthReport {
-        let resolution = resolve_codex_executable().await;
+        let resolution = self.resolve_executable().await;
         let version_result = self.probe_version_from_resolution(&resolution).await;
         let transport_result = if version_result.is_ok() {
             self.probe_transport_ready().await
@@ -1665,12 +1706,13 @@ impl CodexEngine {
         let mut warnings = Vec::new();
         let details = if let Some(error) = execution_error.as_deref() {
             if resolution.executable.is_some() {
-                Some(codex_execution_failure_details(&resolution, error))
+                Some(self.execution_failure_details(&resolution, error))
             } else {
-                codex_unavailable_details(&resolution)
+                self.unavailable_details(&resolution)
             }
         } else {
-            codex_unavailable_details(&resolution).or_else(|| codex_resolution_note(&resolution))
+            self.unavailable_details(&resolution)
+                .or_else(|| self.resolution_note(&resolution))
         };
 
         if available {
@@ -1690,8 +1732,8 @@ impl CodexEngine {
             version,
             details,
             warnings,
-            checks: codex_health_checks(),
-            fixes: codex_fix_commands(&resolution, execution_error.as_deref()),
+            checks: self.health_checks(),
+            fixes: self.fix_commands(&resolution, execution_error.as_deref()),
             protocol_diagnostics,
         }
     }
@@ -1714,6 +1756,48 @@ impl CodexEngine {
         self.runtime_model_cache_snapshot()
             .await
             .unwrap_or_else(|| self.models())
+    }
+
+    async fn resolve_executable(&self) -> CodexExecutableResolution {
+        resolve_engine_executable(self.config.executable_name).await
+    }
+
+    fn unavailable_details(&self, resolution: &CodexExecutableResolution) -> Option<String> {
+        unavailable_details_for_platform(runtime_env::platform_id(), resolution, &self.config)
+    }
+
+    fn execution_failure_details(
+        &self,
+        resolution: &CodexExecutableResolution,
+        error: &str,
+    ) -> String {
+        execution_failure_details_for_platform(
+            runtime_env::platform_id(),
+            resolution,
+            &self.config,
+            error,
+        )
+    }
+
+    fn resolution_note(&self, resolution: &CodexExecutableResolution) -> Option<String> {
+        resolution_note_for_display(resolution, self.config.display_name)
+    }
+
+    fn health_checks(&self) -> Vec<String> {
+        health_checks_for_platform(runtime_env::platform_id(), self.config.executable_name)
+    }
+
+    fn fix_commands(
+        &self,
+        resolution: &CodexExecutableResolution,
+        execution_error: Option<&str>,
+    ) -> Vec<String> {
+        fix_commands_for_platform(
+            runtime_env::platform_id(),
+            resolution,
+            &self.config,
+            execution_error,
+        )
     }
 
     pub async fn uses_external_sandbox(&self) -> bool {
@@ -1744,8 +1828,8 @@ impl CodexEngine {
         let executable = resolution
             .executable
             .as_ref()
-            .ok_or_else(|| CODEX_MISSING_DEFAULT_DETAILS.to_string())?;
-        let output = codex_command(executable)
+            .ok_or_else(|| self.config.missing_default_details.to_string())?;
+        let output = configured_command(executable)
             .arg("--version")
             .output()
             .await
@@ -1769,7 +1853,10 @@ impl CodexEngine {
         }
         let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
         if version.is_empty() {
-            return Err("codex --version returned empty output".to_string());
+            return Err(format!(
+                "{} --version returned empty output",
+                self.config.executable_name
+            ));
         }
         Ok(version)
     }
@@ -1777,10 +1864,14 @@ impl CodexEngine {
     async fn probe_transport_ready(&self) -> Option<String> {
         match tokio::time::timeout(HEALTH_APP_SERVER_TIMEOUT, self.ensure_ready_transport()).await {
             Ok(Ok(_)) => None,
-            Ok(Err(error)) => Some(format!("failed to initialize `codex app-server`: {error}")),
+            Ok(Err(error)) => Some(format!(
+                "failed to initialize `{}` app-server: {error}",
+                self.config.executable_name
+            )),
             Err(_) => Some(format!(
-                "timed out initializing `codex app-server` after {}s",
-                HEALTH_APP_SERVER_TIMEOUT.as_secs()
+                "timed out initializing `{}` app-server after {}s",
+                self.config.executable_name,
+                HEALTH_APP_SERVER_TIMEOUT.as_secs(),
             )),
         }
     }
@@ -2082,10 +2173,11 @@ impl CodexEngine {
     }
 
     async fn spawn_transport_with_backoff(&self) -> anyhow::Result<Arc<CodexTransport>> {
-        let resolution = resolve_codex_executable().await;
+        let resolution = self.resolve_executable().await;
         let codex_executable = resolution.executable.as_ref().ok_or_else(|| {
-            anyhow::anyhow!(codex_unavailable_details(&resolution)
-                .unwrap_or_else(|| CODEX_MISSING_DEFAULT_DETAILS.to_string()))
+            anyhow::anyhow!(self
+                .unavailable_details(&resolution)
+                .unwrap_or_else(|| self.config.missing_default_details.to_string()))
         })?;
 
         let mut backoff = TRANSPORT_RESTART_BASE_BACKOFF;
@@ -2948,9 +3040,13 @@ fn map_codex_model(value: CodexModel) -> ModelInfo {
 }
 
 pub async fn resolve_codex_executable() -> CodexExecutableResolution {
+    resolve_engine_executable("codex").await
+}
+
+async fn resolve_engine_executable(command: &str) -> CodexExecutableResolution {
     let app_path = std::env::var("PATH").ok();
 
-    if let Some(path) = runtime_env::resolve_executable("codex") {
+    if let Some(path) = runtime_env::resolve_executable(command) {
         return CodexExecutableResolution {
             executable: Some(path),
             source: "app-path",
@@ -2959,7 +3055,7 @@ pub async fn resolve_codex_executable() -> CodexExecutableResolution {
         };
     }
 
-    let login_shell_executable = detect_codex_via_login_shell().await;
+    let login_shell_executable = detect_executable_via_login_shell(command).await;
     let executable = login_shell_executable.clone();
 
     CodexExecutableResolution {
@@ -2982,6 +3078,14 @@ fn codex_unavailable_details_for_platform(
     platform: &str,
     resolution: &CodexExecutableResolution,
 ) -> Option<String> {
+    unavailable_details_for_platform(platform, resolution, &CodexEngineConfig::codex())
+}
+
+fn unavailable_details_for_platform(
+    platform: &str,
+    resolution: &CodexExecutableResolution,
+    config: &CodexEngineConfig,
+) -> Option<String> {
     if resolution.executable.is_some() {
         return None;
     }
@@ -2990,22 +3094,24 @@ fn codex_unavailable_details_for_platform(
 
     match (platform, resolution.login_shell_executable.as_ref()) {
         ("macos", Some(shell_path)) => Some(format!(
-            "Codex was found in your login shell at `{}`, but Panes does not see this in its app PATH. This is common when launching from Finder on macOS. App PATH: `{}`",
+            "{} was found in your login shell at `{}`, but Panes does not see this in its app PATH. This is common when launching from Finder on macOS. App PATH: `{}`",
+            config.display_name,
             shell_path.display(),
             path_preview
         )),
         ("windows", _) => Some(format!(
-            "{}. App PATH: `{}`. On Windows, Codex is usually installed with `npm install -g @openai/codex` and exposed from `%APPDATA%\\npm`.",
-            CODEX_MISSING_DEFAULT_DETAILS, path_preview
+            "{}. App PATH: `{}`. On Windows, {} is usually installed with `npm install -g {}` and exposed from `%APPDATA%\\npm`.",
+            config.missing_default_details, path_preview, config.display_name, config.npm_package
         )),
         (_, Some(shell_path)) => Some(format!(
-            "Codex was found in your login shell at `{}`, but Panes does not see this in its app PATH. App PATH: `{}`",
+            "{} was found in your login shell at `{}`, but Panes does not see this in its app PATH. App PATH: `{}`",
+            config.display_name,
             shell_path.display(),
             path_preview
         )),
         (_, None) => Some(format!(
             "{}. App PATH: `{}`",
-            CODEX_MISSING_DEFAULT_DETAILS, path_preview
+            config.missing_default_details, path_preview
         )),
     }
 }
@@ -3017,6 +3123,15 @@ fn codex_execution_failure_details(resolution: &CodexExecutableResolution, error
 fn codex_execution_failure_details_for_platform(
     platform: &str,
     resolution: &CodexExecutableResolution,
+    error: &str,
+) -> String {
+    execution_failure_details_for_platform(platform, resolution, &CodexEngineConfig::codex(), error)
+}
+
+fn execution_failure_details_for_platform(
+    platform: &str,
+    resolution: &CodexExecutableResolution,
+    config: &CodexEngineConfig,
     error: &str,
 ) -> String {
     let path_preview = app_path_preview(resolution.app_path.as_deref());
@@ -3032,34 +3147,46 @@ fn codex_execution_failure_details_for_platform(
     {
         if platform == "windows" {
             return format!(
-                "Codex executable was found at `{executable}`, but Panes could not find `node` when launching it. This usually means Node.js is not installed or its install directory is missing from PATH on Windows. App PATH: `{path_preview}`. Error: {error}"
+                "{} executable was found at `{executable}`, but Panes could not find `node` when launching it. This usually means Node.js is not installed or its install directory is missing from PATH on Windows. App PATH: `{path_preview}`. Error: {error}",
+                config.display_name
             );
         }
 
         if platform != "macos" {
             return format!(
-                "Codex executable was found at `{executable}`, but Panes could not find `node` when launching it. App PATH: `{path_preview}`. Error: {error}"
+                "{} executable was found at `{executable}`, but Panes could not find `node` when launching it. App PATH: `{path_preview}`. Error: {error}",
+                config.display_name
             );
         }
 
         return format!(
-            "Codex executable was found at `{executable}`, but Panes could not find `node` when launching it (Finder-launched apps often have a limited PATH). App PATH: `{path_preview}`. Error: {error}"
+            "{} executable was found at `{executable}`, but Panes could not find `node` when launching it (Finder-launched apps often have a limited PATH). App PATH: `{path_preview}`. Error: {error}",
+            config.display_name
         );
     }
 
     format!(
-        "Codex executable was found at `{executable}`, but Panes could not run it. App PATH: `{path_preview}`. Error: {error}"
+        "{} executable was found at `{executable}`, but Panes could not run it. App PATH: `{path_preview}`. Error: {error}",
+        config.display_name
     )
 }
 
 fn codex_resolution_note(resolution: &CodexExecutableResolution) -> Option<String> {
+    resolution_note_for_display(resolution, "Codex")
+}
+
+fn resolution_note_for_display(
+    resolution: &CodexExecutableResolution,
+    display_name: &str,
+) -> Option<String> {
     if resolution.source == "app-path" {
         return None;
     }
 
     let executable = resolution.executable.as_ref()?;
     Some(format!(
-        "Codex detected via {} at `{}`.",
+        "{} detected via {} at `{}`.",
+        display_name,
         resolution.source,
         executable.display()
     ))
@@ -3070,27 +3197,34 @@ fn codex_health_checks() -> Vec<String> {
 }
 
 fn codex_health_checks_for_platform(platform: &str) -> Vec<String> {
+    health_checks_for_platform(platform, "codex")
+}
+
+fn health_checks_for_platform(platform: &str, executable_name: &str) -> Vec<String> {
     let mut checks = vec![
-        "codex --version".to_string(),
+        format!("{executable_name} --version"),
         "node --version".to_string(),
-        "codex app-server --help".to_string(),
+        format!("{executable_name} app-server --help"),
     ];
 
     match platform {
         "windows" => {
-            checks.push("where codex".to_string());
+            checks.push(format!("where {executable_name}"));
             checks.push("where node".to_string());
             checks.push("echo %PATH%".to_string());
         }
         "macos" => {
-            checks.push("command -v codex".to_string());
+            checks.push(format!("command -v {executable_name}"));
             checks.push("command -v node".to_string());
             checks.push("echo \"$PATH\"".to_string());
-            checks.push("/bin/zsh -lic 'command -v codex && codex --version'".to_string());
+            checks.push(format!(
+                "/bin/zsh -lic 'command -v {0} && {0} --version'",
+                executable_name
+            ));
             checks.push("sandbox-exec -p '(version 1) (allow default)' /usr/bin/true".to_string());
         }
         _ => {
-            checks.push("command -v codex".to_string());
+            checks.push(format!("command -v {executable_name}"));
             checks.push("command -v node".to_string());
         }
     }
@@ -3110,6 +3244,20 @@ fn codex_fix_commands_for_platform(
     resolution: &CodexExecutableResolution,
     execution_error: Option<&str>,
 ) -> Vec<String> {
+    fix_commands_for_platform(
+        platform,
+        resolution,
+        &CodexEngineConfig::codex(),
+        execution_error,
+    )
+}
+
+fn fix_commands_for_platform(
+    platform: &str,
+    resolution: &CodexExecutableResolution,
+    config: &CodexEngineConfig,
+    execution_error: Option<&str>,
+) -> Vec<String> {
     if platform == "macos" {
         let mut fixes = Vec::new();
         if resolution.executable.is_none() {
@@ -3122,7 +3270,10 @@ fn codex_fix_commands_for_platform(
                     fixes.push("open -a Panes".to_string());
                 }
             } else {
-                fixes.push("/bin/zsh -lic 'command -v codex && codex --version'".to_string());
+                fixes.push(format!(
+                    "/bin/zsh -lic 'command -v {0} && {0} --version'",
+                    config.executable_name
+                ));
                 fixes.push("open -a Panes".to_string());
             }
         } else if execution_error.is_some() {
@@ -3134,10 +3285,10 @@ fn codex_fix_commands_for_platform(
                     ));
                 }
             }
-            fixes.push(
-                "/bin/zsh -lic 'command -v node && command -v codex && codex --version'"
-                    .to_string(),
-            );
+            fixes.push(format!(
+                "/bin/zsh -lic 'command -v node && command -v {0} && {0} --version'",
+                config.executable_name
+            ));
             fixes.push("open -a Panes".to_string());
         }
 
@@ -3147,8 +3298,8 @@ fn codex_fix_commands_for_platform(
     if platform == "windows" {
         let mut fixes = Vec::new();
         if resolution.executable.is_none() {
-            fixes.push("npm install -g @openai/codex".to_string());
-            fixes.push("where codex".to_string());
+            fixes.push(format!("npm install -g {}", config.npm_package));
+            fixes.push(format!("where {}", config.executable_name));
             fixes.push("echo %APPDATA%".to_string());
             fixes.push(
                 "Ensure `%APPDATA%\\npm` is present in PATH, then restart Panes.".to_string(),
@@ -3158,7 +3309,7 @@ fn codex_fix_commands_for_platform(
 
         if execution_error.is_some() {
             fixes.push("where node".to_string());
-            fixes.push("where codex".to_string());
+            fixes.push(format!("where {}", config.executable_name));
             fixes.push("echo %PATH%".to_string());
             fixes.push(
                 "Ensure Node.js 20+ is installed and visible to Panes, then restart the app."
@@ -3179,7 +3330,7 @@ fn app_path_preview(path: Option<&str>) -> String {
         .to_string()
 }
 
-fn codex_augmented_path(executable: &Path) -> Option<OsString> {
+fn configured_augmented_path(executable: &Path) -> Option<OsString> {
     runtime_env::augmented_path_with_prepend(
         executable
             .parent()
@@ -3188,25 +3339,28 @@ fn codex_augmented_path(executable: &Path) -> Option<OsString> {
     )
 }
 
-fn codex_command(executable: &Path) -> Command {
+fn configured_command(executable: &Path) -> Command {
     let mut command = Command::new(executable);
     process_utils::configure_tokio_command(&mut command);
-    if let Some(augmented_path) = codex_augmented_path(executable) {
+    if let Some(augmented_path) = configured_augmented_path(executable) {
         command.env("PATH", augmented_path);
     }
     command
 }
 
 async fn detect_codex_via_login_shell() -> Option<PathBuf> {
+    detect_executable_via_login_shell("codex").await
+}
+
+async fn detect_executable_via_login_shell(executable_name: &str) -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     {
+        let probe_cmd = format!(
+            "(Get-Command {executable_name} -ErrorAction SilentlyContinue | Select-Object -First 1).Source"
+        );
         for powershell in runtime_env::windows_login_probe_shells() {
             let mut cmd = Command::new(&powershell);
-            cmd.args([
-                "-NoLogo",
-                "-Command",
-                "(Get-Command codex -ErrorAction SilentlyContinue | Select-Object -First 1).Source",
-            ]);
+            cmd.args(["-NoLogo", "-Command", probe_cmd.as_str()]);
             process_utils::configure_tokio_command(&mut cmd);
 
             let Ok(Ok(output)) = timeout(Duration::from_secs(10), cmd.output()).await else {
@@ -3237,7 +3391,7 @@ async fn detect_codex_via_login_shell() -> Option<PathBuf> {
                 Command::new(&shell)
                     .args(runtime_env::login_probe_shell_args(
                         &shell,
-                        "command -v codex",
+                        &format!("command -v {executable_name}"),
                     ))
                     .output(),
             )
@@ -3245,8 +3399,9 @@ async fn detect_codex_via_login_shell() -> Option<PathBuf> {
             {
                 Err(_) => {
                     log::warn!(
-                        "timed out probing Codex via login shell `{}`",
-                        shell.display()
+                        "timed out probing `{}` via login shell `{}`",
+                        executable_name,
+                        shell.display(),
                     );
                     continue;
                 }

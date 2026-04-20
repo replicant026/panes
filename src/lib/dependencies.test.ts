@@ -26,6 +26,13 @@ describe("normalizeDependencyReport", () => {
         canAutoInstall: false,
         installMethod: null,
       },
+      opencode: {
+        found: false,
+        version: null,
+        path: null,
+        canAutoInstall: false,
+        installMethod: null,
+      },
       git: {
         found: false,
         version: null,
@@ -55,6 +62,13 @@ describe("normalizeDependencyReport", () => {
         installMethod: null,
       },
       codex: {
+        found: false,
+        version: null,
+        path: null,
+        canAutoInstall: false,
+        installMethod: null,
+      },
+      opencode: {
         found: false,
         version: null,
         path: null,

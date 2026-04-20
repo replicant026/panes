@@ -8,7 +8,7 @@ import type {
 
 export const CHAT_ENGINE_INSTALL_HARNESS_IDS: Readonly<Record<OnboardingChatEngineId, string>> = {
   codex: "codex",
-  opencode: "codex",
+  opencode: "opencode",
   claude: "claude-code",
 };
 
