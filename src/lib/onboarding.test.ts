@@ -74,6 +74,42 @@ describe("onboarding helpers", () => {
     });
   });
 
+  it("prefers active favorites before active defaults during onboarding runtime fallback", () => {
+    expect(
+      resolvePreferredOnboardingChatSelection(["claude"], [
+        {
+          id: "claude",
+          models: [
+            {
+              id: "claude-favorite-disabled",
+              hidden: false,
+              isEnabled: false,
+              isFavorite: true,
+              isDefault: false,
+            },
+            {
+              id: "claude-default-active",
+              hidden: false,
+              isEnabled: true,
+              isFavorite: false,
+              isDefault: true,
+            },
+            {
+              id: "claude-favorite-active",
+              hidden: false,
+              isEnabled: true,
+              isFavorite: true,
+              isDefault: false,
+            },
+          ],
+        },
+      ]),
+    ).toEqual({
+      engineId: "claude",
+      modelId: "claude-favorite-active",
+    });
+  });
+
   it("keeps the existing default behavior when onboarding selected multiple engines", () => {
     expect(
       resolvePreferredOnboardingChatSelection(["codex", "claude"], [

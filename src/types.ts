@@ -446,6 +446,8 @@ export interface EngineModel {
   displayName: string;
   description: string;
   hidden: boolean;
+  isEnabled?: boolean;
+  isFavorite?: boolean;
   isDefault: boolean;
   upgrade?: string;
   availabilityNux?: EngineModelAvailabilityNux;
