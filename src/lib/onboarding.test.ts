@@ -42,6 +42,7 @@ describe("onboarding helpers", () => {
   it("maps the Claude engine id to the installable harness id", () => {
     expect(normalizeOnboardingHarnessInstallId("claude")).toBe("claude-code");
     expect(normalizeOnboardingHarnessInstallId("codex")).toBe("codex");
+    expect(normalizeOnboardingHarnessInstallId("opencode")).toBe("opencode");
     expect(normalizeOnboardingHarnessInstallId("kiro")).toBe("kiro");
   });
 
@@ -151,6 +152,20 @@ describe("onboarding helpers", () => {
           id: "claude",
           available: true,
           warnings: ["ANTHROPIC_API_KEY is not set"],
+          checks: [],
+          fixes: [],
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it("lets OpenCode readiness depend on OpenCode engine health", () => {
+    expect(
+      isChatWorkflowReady(["opencode"], readyDependencies, {
+        opencode: {
+          id: "opencode",
+          available: true,
+          warnings: [],
           checks: [],
           fixes: [],
         },

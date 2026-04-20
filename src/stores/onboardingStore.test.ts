@@ -134,6 +134,18 @@ describe("onboardingStore", () => {
     expect(mockIpc.installHarness).toHaveBeenCalledWith("claude-code");
   });
 
+  it("keeps OpenCode mapped to the OpenCode harness id", async () => {
+    mockIpc.installHarness.mockResolvedValue({
+      success: true,
+      message: "ok",
+    });
+
+    const ok = await useOnboardingStore.getState().installHarness("opencode", "OpenCode");
+
+    expect(ok).toBe(true);
+    expect(mockIpc.installHarness).toHaveBeenCalledWith("opencode");
+  });
+
   it("cleans up dependency installs when progress subscription fails", async () => {
     mockListenInstallProgress.mockRejectedValue(new Error("listen failed"));
 
