@@ -13,7 +13,7 @@
         "description": "Veja quais CLIs de agent o Panes já suporta, instale as que fizerem sentido e depois escolha o workspace onde quer começar."
       },
       "chat": {
-        "title": "Chat com Codex / Claude",
+        "title": "Chat com Codex / OpenCode / Claude",
         "description": "Escolha Codex, OpenCode, Claude ou qualquer combinação. O Panes verifica o que está pronto, ajuda a instalar o que faltar e depois leva você para um workspace."
       }
     }
@@ -33,7 +33,7 @@
         "description": "Chat via Codex App Server. Pode instalar Node.js e Codex CLI se estiverem ausentes."
       },
       "opencode": {
-        "description": "Chat via OpenCode. Pode instalar Node.js e OpenCode CLI se estiverem ausentes."
+        "description": "Chat via OpenCode. Usa o harness OpenCode e não exige Codex CLI."
       },
       "claude": {
         "description": "Chat via Claude Agent SDK. Não exige instalar a Claude CLI separadamente."

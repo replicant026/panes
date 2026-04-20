@@ -72,8 +72,8 @@ const INTERACTIVE_ONBOARDING_ROLES: ReadonlySet<string> = new Set([
 ] as const);
 
 export function normalizeOnboardingHarnessInstallId(targetId: string): string {
-  if (targetId === "claude") {
-    return CHAT_ENGINE_INSTALL_HARNESS_IDS.claude;
+  if (targetId in CHAT_ENGINE_INSTALL_HARNESS_IDS) {
+    return CHAT_ENGINE_INSTALL_HARNESS_IDS[targetId as OnboardingChatEngineId];
   }
 
   return targetId;
@@ -162,23 +162,16 @@ export function isChatEngineReady(
   dependencyReport: DependencyReport | null,
   engineHealth: Partial<Record<OnboardingChatEngineId, EngineHealth>>,
 ): boolean {
+  const health = engineHealth[engineId];
   if (engineId === "codex") {
     return Boolean(
       dependencyReport?.node.found &&
         dependencyReport.codex.found &&
-        (engineHealth.codex?.available || isCodexAuthDeferred(engineHealth.codex)),
+        (health?.available || isCodexAuthDeferred(health)),
     );
   }
 
-  if (engineId === "opencode") {
-    return Boolean(
-      dependencyReport?.node.found &&
-        dependencyReport.opencode.found &&
-        (engineHealth.opencode?.available || isCodexAuthDeferred(engineHealth.opencode)),
-    );
-  }
-
-  return engineHealth.claude?.available ?? false;
+  return health?.available ?? false;
 }
 
 export function isChatWorkflowReady(

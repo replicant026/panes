@@ -73,16 +73,14 @@ const CHAT_ENGINE_OPTIONS: Array<{
   { id: "claude", descriptionKey: "chatEngines.options.claude.description" },
 ];
 
-function getChatEngineDisplayName(id: OnboardingChatEngineId): string {
-  switch (id) {
+function getChatEngineLabel(engineId: OnboardingChatEngineId): string {
+  switch (engineId) {
     case "codex":
       return "Codex";
     case "opencode":
       return "OpenCode";
     case "claude":
       return "Claude";
-    default:
-      return id;
   }
 }
 
@@ -369,7 +367,7 @@ function ChatEngineCard({
       </div>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)", marginBottom: 3 }}>
-          {getChatEngineDisplayName(id)}
+          {getChatEngineLabel(id)}
         </div>
         <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: "var(--text-3)" }}>
           {description}
@@ -585,7 +583,7 @@ function ReadinessEngineRow({
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {getHarnessIcon(engineId, 22)}
           <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)" }}>
-            {getChatEngineDisplayName(engineId)}
+            {getChatEngineLabel(engineId)}
           </span>
         </div>
         <span
