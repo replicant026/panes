@@ -83,8 +83,14 @@ function showRuntimeToast(runtimeToast?: RuntimeToast) {
   }
 }
 
-function resolveAgentDisplayName(engineId: "codex" | "claude"): string {
-  return engineId === "claude" ? "Claude" : "Codex";
+function resolveAgentDisplayName(engineId: "codex" | "claude" | "opencode"): string {
+  if (engineId === "claude") {
+    return "Claude";
+  }
+  if (engineId === "opencode") {
+    return "OpenCode";
+  }
+  return "Codex";
 }
 
 function resolveChatNotificationBody(
