@@ -1,0 +1,7 @@
+{"event":"turn.started","turn_id":"turn_01"}
+{"event":"message.delta","delta":"Hello"}
+{"event":"reasoning.delta","delta":"Analyzing..."}
+{"event":"tool.started","id":"tool_1","tool":"bash"}
+{"event":"tool.stdout","id":"tool_1","delta":"running tests"}
+{"event":"tool.completed","id":"tool_1","success":true,"output":"done","duration_ms":42}
+{"event":"turn.completed","turn_id":"turn_01"}

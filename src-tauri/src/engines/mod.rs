@@ -10,6 +10,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     engines::{
+        api_direct::OpenCodeEngine,
         claude_sidecar::ClaudeSidecarEngine,
         codex::{CodexEngine, CodexForkedThread, CodexReviewStarted},
         opencode::OpenCodeEngine,
@@ -357,6 +358,7 @@ pub struct EngineManager {
     codex: Arc<CodexEngine>,
     opencode: Arc<OpenCodeEngine>,
     claude: Arc<ClaudeSidecarEngine>,
+    opencode: Arc<OpenCodeEngine>,
 }
 
 impl EngineManager {
@@ -365,6 +367,7 @@ impl EngineManager {
             codex: Arc::new(CodexEngine::default()),
             opencode: Arc::new(OpenCodeEngine::default()),
             claude: Arc::new(ClaudeSidecarEngine::default()),
+            opencode: Arc::new(OpenCodeEngine::default()),
         }
     }
 
@@ -419,6 +422,12 @@ impl EngineManager {
                 models: claude_models.into_iter().map(map_model_info).collect(),
                 capabilities: map_engine_capabilities(capabilities_for_engine(self.claude.id())),
             },
+            EngineInfoDto {
+                id: self.opencode.id().to_string(),
+                name: self.opencode.name().to_string(),
+                models: opencode_models.into_iter().map(map_model_info).collect(),
+                capabilities: map_engine_capabilities(capabilities_for_engine(self.opencode.id())),
+            },
         ])
     }
 
@@ -472,6 +481,7 @@ impl EngineManager {
             "codex" => self.codex.prewarm().await,
             "opencode" => self.opencode.prewarm().await,
             "claude" => self.claude.prewarm().await,
+            "opencode" => Ok(()),
             _ => anyhow::bail!("unknown engine: {engine_id}"),
         }
     }
