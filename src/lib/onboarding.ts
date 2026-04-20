@@ -41,6 +41,7 @@ interface OnboardingChatModelSelection {
   hidden: boolean;
   isEnabled?: boolean;
   isDefault: boolean;
+  isFavorite?: boolean;
 }
 
 interface OnboardingChatEngineSelectionCandidate {
