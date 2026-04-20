@@ -18,13 +18,19 @@ const LOGIN_SHELL_PROBE_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[tauri::command]
 pub async fn check_dependencies() -> Result<DependencyReport, String> {
-    let (node, git, codex) = tokio::join!(detect_node(), detect_git(), detect_codex(),);
+    let (node, git, codex, opencode) = tokio::join!(
+        detect_node(),
+        detect_git(),
+        detect_codex(),
+        detect_opencode(),
+    );
 
     let package_managers = detect_package_managers(node.found).await;
 
     Ok(DependencyReport {
         node,
         codex,
+        opencode,
         git,
         platform: runtime_env::platform_id().to_string(),
         package_managers,
@@ -55,6 +61,17 @@ pub async fn install_dependency(
                     "install".to_string(),
                     "-g".to_string(),
                     "@openai/codex".to_string(),
+                ],
+            )
+        }
+        ("opencode", "npm_global") => {
+            let npm = resolve_npm_path().await;
+            (
+                npm,
+                vec![
+                    "install".to_string(),
+                    "-g".to_string(),
+                    "opencode-ai".to_string(),
                 ],
             )
         }
@@ -160,6 +177,46 @@ async fn detect_codex() -> DepStatus {
     // Not found — check if npm is available for auto-install.
     // On macOS .app, `which` won't find npm since the process PATH is minimal,
     // so check well-known paths and login shell too.
+    let npm_available = runtime_env::resolve_executable("npm").is_some()
+        || detect_via_login_shell("npm", "--version").await.is_some();
+
+    DepStatus {
+        found: false,
+        version: None,
+        path: None,
+        can_auto_install: npm_available,
+        install_method: if npm_available {
+            Some("npm_global".to_string())
+        } else {
+            None
+        },
+    }
+}
+
+
+async fn detect_opencode() -> DepStatus {
+    if let Some(path) = runtime_env::resolve_executable("opencode") {
+        if let Some(version) = get_command_version(&path, &["--version"]).await {
+            return DepStatus {
+                found: true,
+                version: Some(version),
+                path: Some(path.display().to_string()),
+                can_auto_install: false,
+                install_method: None,
+            };
+        }
+    }
+
+    if let Some((path, version)) = detect_via_login_shell("opencode", "--version").await {
+        return DepStatus {
+            found: true,
+            version: Some(version),
+            path: Some(path),
+            can_auto_install: false,
+            install_method: None,
+        };
+    }
+
     let npm_available = runtime_env::resolve_executable("npm").is_some()
         || detect_via_login_shell("npm", "--version").await.is_some();
 

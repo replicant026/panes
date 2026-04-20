@@ -17,6 +17,13 @@ const baseReport: DependencyReport = {
     canAutoInstall: false,
     installMethod: null,
   },
+  opencode: {
+    found: false,
+    version: null,
+    path: null,
+    canAutoInstall: false,
+    installMethod: null,
+  },
   git: {
     found: true,
     version: "2.50.0",

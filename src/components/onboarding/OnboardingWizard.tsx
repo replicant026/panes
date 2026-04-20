@@ -69,6 +69,7 @@ const CHAT_ENGINE_OPTIONS: Array<{
   descriptionKey: string;
 }> = [
   { id: "codex", descriptionKey: "chatEngines.options.codex.description" },
+  { id: "opencode", descriptionKey: "chatEngines.options.opencode.description" },
   { id: "claude", descriptionKey: "chatEngines.options.claude.description" },
 ];
 
@@ -355,7 +356,7 @@ function ChatEngineCard({
       </div>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)", marginBottom: 3 }}>
-          {id === "codex" ? "Codex" : "Claude"}
+          {id === "codex" ? "Codex" : id === "opencode" ? "OpenCode" : "Claude"}
         </div>
         <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: "var(--text-3)" }}>
           {description}
@@ -571,7 +572,7 @@ function ReadinessEngineRow({
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {getHarnessIcon(engineId, 22)}
           <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)" }}>
-            {engineId === "codex" ? "Codex" : "Claude"}
+            {engineId === "codex" ? "Codex" : engineId === "opencode" ? "OpenCode" : "Claude"}
           </span>
         </div>
         <span
@@ -891,6 +892,15 @@ export function OnboardingWizard() {
     if (!report?.codex.installMethod) return;
     clearInstallState();
     const ok = await installDependency("codex", report.codex.installMethod, "Codex CLI");
+    if (ok) await refreshReadiness();
+  }
+
+  async function handleInstallOpenCode() {
+    if (installing) return;
+    const report = readiness.dependencyReport;
+    if (!report?.opencode.installMethod) return;
+    clearInstallState();
+    const ok = await installDependency("opencode", report.opencode.installMethod, "OpenCode CLI");
     if (ok) await refreshReadiness();
   }
 
@@ -1231,7 +1241,7 @@ export function OnboardingWizard() {
               {/* ── Chat Engines ── */}
               {step === "chatEngines" ? (
                 <div style={{ display: "grid", gap: 10 }}>
-                  <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr" }}>
+                  <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
                     {CHAT_ENGINE_OPTIONS.map((engine, index) => (
                       <ChatEngineCard
                         key={engine.id}
@@ -1295,6 +1305,28 @@ export function OnboardingWizard() {
                       onInstall={
                         readiness.dependencyReport.codex.canAutoInstall && readiness.dependencyReport.codex.installMethod
                           ? () => void handleInstallCodex()
+                          : undefined
+                      }
+                    />
+                  ) : null}
+
+
+                  {selectedChatEngines.includes("opencode") &&
+                  readiness.dependencyReport &&
+                  !readiness.dependencyReport.opencode.found ? (
+                    <ReadinessDependencyCard
+                      label="OpenCode CLI"
+                      description={
+                        readiness.dependencyReport.opencode.canAutoInstall
+                          ? t("setup:chatReadiness.opencodeInstallAvailable")
+                          : t("setup:chatReadiness.opencodeInstallManual")
+                      }
+                      command="npm install -g opencode-ai"
+                      disabled={Boolean(installing)}
+                      installing={installing?.kind === "dependency" && installing.id === "opencode"}
+                      onInstall={
+                        readiness.dependencyReport.opencode.canAutoInstall && readiness.dependencyReport.opencode.installMethod
+                          ? () => void handleInstallOpenCode()
                           : undefined
                       }
                     />

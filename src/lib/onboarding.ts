@@ -8,7 +8,7 @@ import type {
 
 export const CHAT_ENGINE_INSTALL_HARNESS_IDS: Readonly<Record<OnboardingChatEngineId, string>> = {
   codex: "codex",
-  opencode: "codex",
+  opencode: "opencode",
   claude: "claude-code",
 };
 
@@ -167,6 +167,14 @@ export function isChatEngineReady(
       dependencyReport?.node.found &&
         dependencyReport.codex.found &&
         (engineHealth.codex?.available || isCodexAuthDeferred(engineHealth.codex)),
+    );
+  }
+
+  if (engineId === "opencode") {
+    return Boolean(
+      dependencyReport?.node.found &&
+        dependencyReport.opencode.found &&
+        (engineHealth.opencode?.available || isCodexAuthDeferred(engineHealth.opencode)),
     );
   }
 
