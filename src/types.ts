@@ -998,6 +998,7 @@ export type OnboardingStep =
 export interface DependencyReport {
   node: DepStatus;
   codex: DepStatus;
+  opencode: DepStatus;
   git: DepStatus;
   platform: string;
   packageManagers: string[];
