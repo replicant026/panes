@@ -54,6 +54,8 @@
     "nodeInstallManual": "Node.js is missing. Install Node.js 20+ manually, then refresh the readiness check.",
     "codexInstallAvailable": "Codex CLI is missing. Panes can install it automatically for the Codex chat engine.",
     "codexInstallManual": "Codex CLI is missing. Install it manually, then refresh the readiness check.",
+    "opencodeInstallAvailable": "OpenCode CLI is missing. Install it with `npm install -g opencode-ai`, then refresh the readiness check.",
+    "opencodeInstallManual": "OpenCode CLI is missing. Install `npm install -g opencode-ai`, then refresh the readiness check.",
     "deps": {
       "node": "Node.js"
     },

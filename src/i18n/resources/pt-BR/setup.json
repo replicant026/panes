@@ -54,6 +54,8 @@
     "nodeInstallManual": "Node.js está ausente. Instale manualmente o Node.js 20+ e depois atualize a verificação.",
     "codexInstallAvailable": "Codex CLI está ausente. O Panes pode instalar automaticamente para o engine de chat do Codex.",
     "codexInstallManual": "Codex CLI está ausente. Instale manualmente e depois atualize a verificação.",
+    "opencodeInstallAvailable": "OpenCode CLI está ausente. Instale com `npm install -g opencode-ai` e depois atualize a verificação.",
+    "opencodeInstallManual": "OpenCode CLI está ausente. Instale `npm install -g opencode-ai` e depois atualize a verificação.",
     "deps": {
       "node": "Node.js"
     },

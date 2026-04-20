@@ -145,3 +145,46 @@ pub struct UsageLimitsSnapshot {
     pub five_hour_resets_at: Option<i64>,
     pub weekly_resets_at: Option<i64>,
 }
+
+impl EngineEvent {
+    pub fn normalized_text_delta(content: impl AsRef<str>) -> Option<Self> {
+        normalize_content(content.as_ref()).map(|content| Self::TextDelta { content })
+    }
+
+    pub fn normalized_thinking_delta(content: impl AsRef<str>) -> Option<Self> {
+        normalize_content(content.as_ref()).map(|content| Self::ThinkingDelta { content })
+    }
+
+    pub fn normalized_action_output_delta(
+        action_id: String,
+        stream: OutputStream,
+        content: impl AsRef<str>,
+    ) -> Option<Self> {
+        normalize_content(content.as_ref()).map(|content| Self::ActionOutputDelta {
+            action_id,
+            stream,
+            content,
+        })
+    }
+
+    pub fn normalized_action_progress(action_id: String, message: impl AsRef<str>) -> Option<Self> {
+        normalize_content(message.as_ref())
+            .map(|message| Self::ActionProgressUpdated { action_id, message })
+    }
+
+    pub fn normalized_error(message: impl AsRef<str>, recoverable: bool) -> Option<Self> {
+        normalize_content(message.as_ref()).map(|message| Self::Error {
+            message,
+            recoverable,
+        })
+    }
+}
+
+fn normalize_content(content: &str) -> Option<String> {
+    let normalized = content.replace("\r\n", "\n").replace('\r', "\n");
+    if normalized.trim().is_empty() {
+        None
+    } else {
+        Some(normalized)
+    }
+}

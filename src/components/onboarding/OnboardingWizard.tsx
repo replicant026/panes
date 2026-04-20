@@ -771,11 +771,15 @@ export function OnboardingWizard() {
     readiness.loading,
     readiness.error,
   );
+  const codexSelected = selectedChatEngines.includes("codex");
+  const opencodeSelected = selectedChatEngines.includes("opencode");
   const codexAuthDeferred =
-    selectedChatEngines.includes("codex") &&
+    (codexSelected || opencodeSelected) &&
     readiness.dependencyReport?.node.found === true &&
-    readiness.dependencyReport.codex.found === true &&
-    isCodexAuthDeferred(readiness.engineHealth.codex);
+    (!codexSelected || readiness.dependencyReport.codex.found === true) &&
+    (!opencodeSelected || readiness.dependencyReport.opencode.found === true) &&
+    ((codexSelected && isCodexAuthDeferred(readiness.engineHealth.codex)) ||
+      (opencodeSelected && isCodexAuthDeferred(readiness.engineHealth.opencode)));
   const busy = Boolean(installing) || workspaceLoading;
   const workspaceConfirmed =
     selectedWorkspaceId !== null && confirmedWorkspaceId === selectedWorkspaceId;
@@ -1314,7 +1318,8 @@ export function OnboardingWizard() {
                       disabled={Boolean(installing)}
                       installing={installing?.kind === "dependency" && installing.id === "codex"}
                       onInstall={
-                        readiness.dependencyReport.codex.canAutoInstall && readiness.dependencyReport.codex.installMethod
+                        readiness.dependencyReport.codex.canAutoInstall &&
+                        readiness.dependencyReport.codex.installMethod
                           ? () => void handleInstallCodex()
                           : undefined
                       }
