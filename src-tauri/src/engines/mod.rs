@@ -27,6 +27,7 @@ pub mod codex_event_mapper;
 pub mod codex_protocol;
 pub mod codex_transport;
 pub mod events;
+pub mod opencode_event_mapper;
 
 pub use codex::CodexRuntimeEvent;
 pub use events::*;
@@ -114,9 +115,16 @@ const CLAUDE_CAPABILITIES: EngineCapabilities = EngineCapabilities {
     approval_decisions: &["accept", "decline", "accept_for_session"],
 };
 
+const OPENCODE_CAPABILITIES: EngineCapabilities = EngineCapabilities {
+    permission_modes: &["on-request", "never"],
+    sandbox_modes: &["read-only", "workspace-write", "danger-full-access"],
+    approval_decisions: &["accept", "decline", "accept_for_session"],
+};
+
 pub fn capabilities_for_engine(engine_id: &str) -> EngineCapabilities {
     match engine_id {
         "claude" => CLAUDE_CAPABILITIES,
+        "opencode" => OPENCODE_CAPABILITIES,
         _ => CODEX_CAPABILITIES,
     }
 }
@@ -155,6 +163,10 @@ pub fn normalize_approval_response_for_engine(
     engine_id: &str,
     response: Value,
 ) -> Result<Value, String> {
+    if engine_id == "opencode" {
+        return normalize_opencode_approval_response(response);
+    }
+
     if engine_id != "claude" {
         return Ok(response);
     }
@@ -200,6 +212,39 @@ pub fn normalize_approval_response_for_engine(
     Err(
         "Claude approval response must include either an explicit `decision` field or an `answers` object".to_string(),
     )
+}
+
+fn normalize_opencode_approval_response(response: Value) -> Result<Value, String> {
+    let object = response
+        .as_object()
+        .ok_or_else(|| "OpenCode approval response must be a JSON object".to_string())?;
+
+    if object.len() != 1 {
+        return Err("OpenCode approval response must include only a `decision` field".to_string());
+    }
+
+    let decision = object
+        .get("decision")
+        .or_else(|| object.get("action"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| "OpenCode approval response must include a `decision` string".to_string())?;
+
+    let normalized = normalize_opencode_approval_decision(decision).ok_or_else(|| {
+        "unsupported OpenCode approval decision. expected one of: accept, decline, accept_for_session"
+            .to_string()
+    })?;
+
+    Ok(json!({ "decision": normalized }))
+}
+
+fn normalize_opencode_approval_decision(value: &str) -> Option<&'static str> {
+    let normalized = value.trim().to_lowercase().replace(['-', '_'], "");
+    match normalized.as_str() {
+        "accept" => Some("accept"),
+        "decline" | "deny" | "reject" => Some("decline"),
+        "acceptforsession" => Some("accept_for_session"),
+        _ => None,
+    }
 }
 
 pub fn approval_response_route_for_engine(
@@ -746,6 +791,21 @@ mod tests {
     }
 
     #[test]
+    fn opencode_capabilities_expose_supported_contract() {
+        let capabilities = capabilities_for_engine("opencode");
+
+        assert_eq!(capabilities.permission_modes, &["on-request", "never"]);
+        assert_eq!(
+            capabilities.sandbox_modes,
+            &["read-only", "workspace-write", "danger-full-access"]
+        );
+        assert_eq!(
+            capabilities.approval_decisions,
+            &["accept", "decline", "accept_for_session"]
+        );
+    }
+
+    #[test]
     fn validate_engine_sandbox_mode_rejects_unsupported_claude_full_access() {
         assert!(validate_engine_sandbox_mode("claude", Some("danger-full-access")).is_err());
         assert!(validate_engine_sandbox_mode("claude", Some("workspace-write")).is_ok());
@@ -811,6 +871,33 @@ mod tests {
                 }
             })
         );
+    }
+
+    #[test]
+    fn normalize_opencode_approval_response_validates_decisions() {
+        assert_eq!(
+            normalize_approval_response_for_engine("opencode", json!({ "decision": "accept" }))
+                .unwrap(),
+            json!({ "decision": "accept" })
+        );
+        assert_eq!(
+            normalize_approval_response_for_engine(
+                "opencode",
+                json!({ "decision": "acceptForSession" })
+            )
+            .unwrap(),
+            json!({ "decision": "accept_for_session" })
+        );
+        assert_eq!(
+            normalize_approval_response_for_engine("opencode", json!({ "action": "deny" }))
+                .unwrap(),
+            json!({ "decision": "decline" })
+        );
+        assert!(normalize_approval_response_for_engine(
+            "opencode",
+            json!({ "decision": "cancel" })
+        )
+        .is_err());
     }
 
     #[test]
