@@ -93,6 +93,7 @@ import type {
   ChatAttachment,
   ChatInputItem,
   CodexApp,
+  EngineModel,
   CodexSkill,
   ContentBlock,
   EngineHealth,
@@ -550,6 +551,40 @@ function formatModelName(modelName: string): string {
       return segment.charAt(0).toUpperCase() + segment.slice(1);
     })
     .join("-");
+}
+
+type ModelVisibilityCandidate = Pick<
+  EngineModel,
+  "hidden" | "isEnabled" | "isFavorite" | "isDefault"
+>;
+
+function isModelVisible(model: ModelVisibilityCandidate): boolean {
+  return !model.hidden;
+}
+
+function isModelEnabled(model: ModelVisibilityCandidate): boolean {
+  return model.isEnabled !== false;
+}
+
+function isModelActive(model: ModelVisibilityCandidate): boolean {
+  return isModelVisible(model) && isModelEnabled(model);
+}
+
+function selectPreferredModel<T extends ModelVisibilityCandidate>(
+  models: readonly T[],
+): T | null {
+  return (
+    models.find((model) => isModelActive(model) && model.isFavorite) ??
+    models.find((model) => isModelActive(model) && model.isDefault) ??
+    models.find((model) => isModelActive(model)) ??
+    models.find((model) => isModelVisible(model) && model.isFavorite) ??
+    models.find((model) => isModelVisible(model) && model.isDefault) ??
+    models.find((model) => isModelVisible(model)) ??
+    models.find((model) => model.isFavorite) ??
+    models.find((model) => model.isDefault) ??
+    models[0] ??
+    null
+  );
 }
 
 function formatReasoningEffortLabel(
@@ -1569,7 +1604,9 @@ export function ChatPanel() {
   }, [engines, selectedEngineId, t]);
 
   const selectedModel = useMemo(
-    () => availableModels.find((model) => model.id === selectedModelId) ?? availableModels[0] ?? null,
+    () =>
+      availableModels.find((model) => model.id === selectedModelId) ??
+      selectPreferredModel(availableModels),
     [availableModels, selectedModelId],
   );
   const selectedModelSupportsPersonality = selectedEngineId === "codex" &&

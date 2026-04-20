@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, ChevronRight } from "lucide-react";
+import { Check, ChevronDown, Star } from "lucide-react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { useEngineStore } from "../../stores/engineStore";
+import { useModelPickerStore } from "../../stores/modelPickerStore";
 import { getHarnessIcon } from "../shared/HarnessLogos";
 import type { EngineHealth, EngineInfo, EngineModel } from "../../types";
 
@@ -86,22 +87,20 @@ export function ModelPicker({
   const { t } = useTranslation("chat");
   const [open, setOpen] = useState(false);
   const [activeEngineId, setActiveEngineId] = useState(selectedEngineId);
-  const [legacyExpanded, setLegacyExpanded] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const wasOpenRef = useRef(false);
   const [pos, setPos] = useState({ bottom: 0, left: 0 });
   const ensureEngineHealth = useEngineStore((state) => state.ensureHealth);
+  const ensureModelPickerPreferencesLoaded = useModelPickerStore((state) => state.ensureLoaded);
+  const getModelPickerPreference = useModelPickerStore((state) => state.getPreference);
+  const toggleFavorite = useModelPickerStore((state) => state.toggleFavorite);
+  const toggleEnabled = useModelPickerStore((state) => state.toggleEnabled);
 
   // Sync active engine when selection changes externally
   useEffect(() => {
     setActiveEngineId(selectedEngineId);
   }, [selectedEngineId]);
-
-  // Reset legacy expanded when engine changes
-  useEffect(() => {
-    setLegacyExpanded(false);
-  }, [activeEngineId]);
 
   useEffect(() => {
     if (!open) {
@@ -135,6 +134,10 @@ export function ModelPicker({
       left,
     });
   }, [open]);
+
+  useEffect(() => {
+    void ensureModelPickerPreferencesLoaded();
+  }, [ensureModelPickerPreferencesLoaded]);
 
   // Click outside + Escape
   useEffect(() => {
@@ -257,57 +260,101 @@ export function ModelPicker({
           <div className="mp-models">
             <div className="mp-models-header">
               <span className="mp-models-title">{t("modelPicker.models")}</span>
-              <span className="mp-models-count">{activeModels.length}</span>
+              <span className="mp-models-count">{browsingModels.length}</span>
             </div>
 
             <div className="mp-models-list">
-              {activeModels.map((model) => (
-                <ModelRow
-                  key={model.id}
-                  model={model}
-                  engineId={activeEngineId}
-                  isSelected={
-                    selectedEngineId === activeEngineId &&
-                    model.id === (selectedModelId ?? currentModel?.id)
-                  }
-                  selectedEffort={selectedEffort}
-                  onSelect={handleModelSelect}
-                  onEffortChange={onEffortChange}
-                />
-              ))}
+              <ModelSection
+                title={t("modelPicker.favorites")}
+                count={favoriteModels.length}
+              >
+                {favoriteModels.map((model) => (
+                  <ModelRow
+                    key={model.id}
+                    model={model}
+                    engineId={activeEngineId}
+                    isSelected={
+                      selectedEngineId === activeEngineId &&
+                      model.id === (selectedModelId ?? currentModel?.id)
+                    }
+                    selectedEffort={selectedEffort}
+                    onSelect={handleModelSelect}
+                    onEffortChange={onEffortChange}
+                    onToggleFavorite={toggleFavorite}
+                    onToggleEnabled={toggleEnabled}
+                    preference={getModelPickerPreference(activeEngineId, model.id)}
+                  />
+                ))}
+              </ModelSection>
 
-              {legacyModels.length > 0 && (
-                <>
-                  <button
-                    type="button"
-                    className="mp-legacy-toggle"
-                    onClick={() => setLegacyExpanded((prev) => !prev)}
-                  >
-                    <span className="mp-legacy-toggle-label">
-                      {t("modelPicker.legacy", { count: legacyModels.length })}
-                    </span>
-                    <ChevronRight
-                      size={11}
-                      className={`mp-legacy-chevron${legacyExpanded ? " mp-legacy-chevron-open" : ""}`}
-                    />
-                  </button>
-                  {legacyExpanded &&
-                    legacyModels.map((model) => (
-                      <ModelRow
-                        key={model.id}
-                        model={model}
-                        engineId={activeEngineId}
-                        isSelected={
-                          selectedEngineId === activeEngineId &&
-                          model.id === (selectedModelId ?? currentModel?.id)
-                        }
-                        selectedEffort={selectedEffort}
-                        onSelect={handleModelSelect}
-                        onEffortChange={onEffortChange}
-                      />
-                    ))}
-                </>
-              )}
+              <ModelSection
+                title={t("modelPicker.active")}
+                count={activeModels.length}
+              >
+                {activeModels.map((model) => (
+                  <ModelRow
+                    key={model.id}
+                    model={model}
+                    engineId={activeEngineId}
+                    isSelected={
+                      selectedEngineId === activeEngineId &&
+                      model.id === (selectedModelId ?? currentModel?.id)
+                    }
+                    selectedEffort={selectedEffort}
+                    onSelect={handleModelSelect}
+                    onEffortChange={onEffortChange}
+                    onToggleFavorite={toggleFavorite}
+                    onToggleEnabled={toggleEnabled}
+                    preference={getModelPickerPreference(activeEngineId, model.id)}
+                  />
+                ))}
+              </ModelSection>
+
+              <ModelSection
+                title={t("modelPicker.inactive")}
+                count={inactiveModels.length}
+              >
+                {inactiveModels.map((model) => (
+                  <ModelRow
+                    key={model.id}
+                    model={model}
+                    engineId={activeEngineId}
+                    isSelected={
+                      selectedEngineId === activeEngineId &&
+                      model.id === (selectedModelId ?? currentModel?.id)
+                    }
+                    selectedEffort={selectedEffort}
+                    onSelect={handleModelSelect}
+                    onEffortChange={onEffortChange}
+                    onToggleFavorite={toggleFavorite}
+                    onToggleEnabled={toggleEnabled}
+                    preference={getModelPickerPreference(activeEngineId, model.id)}
+                  />
+                ))}
+              </ModelSection>
+
+              <ModelSection
+                title={t("modelPicker.legacySection")}
+                count={legacyModels.length}
+              >
+                {legacyModels.map((model) => (
+                  <ModelRow
+                    key={model.id}
+                    model={model}
+                    engineId={activeEngineId}
+                    isSelected={
+                      selectedEngineId === activeEngineId &&
+                      model.id === (selectedModelId ?? currentModel?.id)
+                    }
+                    selectedEffort={selectedEffort}
+                    onSelect={handleModelSelect}
+                    onEffortChange={onEffortChange}
+                    onToggleFavorite={toggleFavorite}
+                    onToggleEnabled={toggleEnabled}
+                    preference={getModelPickerPreference(activeEngineId, model.id)}
+                  />
+                ))}
+              </ModelSection>
             </div>
           </div>
         </div>,
@@ -323,6 +370,30 @@ export function ModelPicker({
   );
 }
 
+function ModelSection({
+  title,
+  count,
+  children,
+}: {
+  title: string;
+  count: number;
+  children: ReactNode;
+}) {
+  if (count === 0) {
+    return null;
+  }
+
+  return (
+    <section className="mp-model-section">
+      <div className="mp-model-section-header">
+        <span className="mp-model-section-title">{title}</span>
+        <span className="mp-model-section-count">{count}</span>
+      </div>
+      <div className="mp-model-section-body">{children}</div>
+    </section>
+  );
+}
+
 /* ── Model Row ── */
 
 function ModelRow({
@@ -332,6 +403,9 @@ function ModelRow({
   selectedEffort,
   onSelect,
   onEffortChange,
+  onToggleFavorite,
+  onToggleEnabled,
+  preference,
 }: {
   model: EngineModel;
   engineId: string;
@@ -339,17 +413,28 @@ function ModelRow({
   selectedEffort: string;
   onSelect: (engineId: string, modelId: string) => void;
   onEffortChange: (effort: string) => void;
+  onToggleFavorite: (engineId: string, modelId: string) => Promise<void>;
+  onToggleEnabled: (engineId: string, modelId: string) => Promise<void>;
+  preference: { favorite: boolean; enabled: boolean };
 }) {
   const { t } = useTranslation("chat");
   const efforts = model.supportedReasoningEfforts ?? [];
   const showControls = efforts.length > 0;
+  const canToggleEnabled = !model.hidden;
 
   return (
     <div className={`mp-model${isSelected ? " mp-model-selected" : ""}`}>
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         className="mp-model-btn"
         onClick={() => onSelect(engineId, model.id)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onSelect(engineId, model.id);
+          }
+        }}
       >
         <div className="mp-model-info">
           <div className="mp-model-name-row">
@@ -364,10 +449,40 @@ function ModelRow({
             <span className="mp-model-desc">{model.description}</span>
           )}
         </div>
+        <div className="mp-model-actions">
+          <button
+            type="button"
+            className={`mp-model-action-btn${preference.favorite ? " mp-model-action-btn-active" : ""}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              void onToggleFavorite(engineId, model.id);
+            }}
+            title={preference.favorite ? t("modelPicker.unfavorite") : t("modelPicker.favorite")}
+            aria-label={preference.favorite ? t("modelPicker.unfavorite") : t("modelPicker.favorite")}
+          >
+            <Star size={12} />
+          </button>
+          {canToggleEnabled && (
+            <button
+              type="button"
+              className={`mp-model-switch${preference.enabled ? " mp-model-switch-on" : ""}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                void onToggleEnabled(engineId, model.id);
+              }}
+              role="switch"
+              aria-checked={preference.enabled}
+              title={preference.enabled ? t("modelPicker.disable") : t("modelPicker.enable")}
+              aria-label={preference.enabled ? t("modelPicker.disable") : t("modelPicker.enable")}
+            >
+              <span className="mp-model-switch-thumb" />
+            </button>
+          )}
+        </div>
         {isSelected && (
           <Check size={13} className="mp-model-check" />
         )}
-      </button>
+      </div>
 
       {isSelected && showControls && (
         <div className="mp-model-controls">
