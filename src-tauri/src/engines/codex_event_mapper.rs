@@ -89,34 +89,26 @@ impl TurnEventMapper {
                 if let Some(item_id) = extract_any_string(params, &["itemId", "item_id", "id"]) {
                     self.streamed_agent_message_items.insert(item_id);
                 }
-                let content =
-                    extract_any_string(params, &["delta", "text", "content"]).unwrap_or_default();
-                if content.is_empty() {
-                    Vec::new()
-                } else {
-                    vec![EngineEvent::TextDelta { content }]
-                }
+                EngineEvent::normalized_text_delta(
+                    extract_any_string(params, &["delta", "text", "content"]).unwrap_or_default(),
+                )
+                .into_iter()
+                .collect()
             }
-            "itemplandelta" => {
-                let content =
-                    extract_any_string(params, &["delta", "text", "content"]).unwrap_or_default();
-                if content.is_empty() {
-                    Vec::new()
-                } else {
-                    vec![EngineEvent::ThinkingDelta { content }]
-                }
-            }
+            "itemplandelta" => EngineEvent::normalized_thinking_delta(
+                extract_any_string(params, &["delta", "text", "content"]).unwrap_or_default(),
+            )
+            .into_iter()
+            .collect(),
             "itemreasoningsummarypartadded" | "reasoningsummarypartadded" => {
                 self.map_reasoning_summary_part_added(params)
             }
             "itemreasoningsummarytextdelta" | "itemreasoningtextdelta" => {
-                let content =
-                    extract_any_string(params, &["delta", "text", "content"]).unwrap_or_default();
-                if content.is_empty() {
-                    Vec::new()
-                } else {
-                    vec![EngineEvent::ThinkingDelta { content }]
-                }
+                EngineEvent::normalized_thinking_delta(
+                    extract_any_string(params, &["delta", "text", "content"]).unwrap_or_default(),
+                )
+                .into_iter()
+                .collect()
             }
             "itemmcptoolcallprogress" => self.map_mcp_tool_call_progress(params),
             "threadtokenusageupdated" => {
