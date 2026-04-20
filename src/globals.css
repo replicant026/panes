@@ -8094,6 +8094,41 @@ button, input, textarea, select {
   flex: 1;
   overflow-y: auto;
   padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mp-model-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mp-model-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 10px;
+}
+
+.mp-model-section-title {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.mp-model-section-count {
+  font-size: 9.5px;
+  color: var(--text-3);
+}
+
+.mp-model-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
 /* Model row */
@@ -8134,6 +8169,70 @@ button, input, textarea, select {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.mp-model-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.mp-model-action-btn {
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-3);
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.mp-model-action-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-2);
+}
+
+.mp-model-action-btn-active {
+  color: var(--accent);
+}
+
+.mp-model-switch {
+  width: 30px;
+  height: 18px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.mp-model-switch:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.mp-model-switch-on {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.mp-model-switch-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transform: translateX(0);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.mp-model-switch-on .mp-model-switch-thumb {
+  transform: translateX(12px);
 }
 
 .mp-model-name-row {
