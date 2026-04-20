@@ -474,6 +474,11 @@ export interface ReasoningEffortOption {
   description: string;
 }
 
+export interface ModelPickerPreference {
+  favorite: boolean;
+  enabled: boolean;
+}
+
 export interface EngineHealth {
   id: string;
   available: boolean;

@@ -41,6 +41,7 @@ import type {
   Message,
   MessageWindow,
   MessageWindowCursor,
+  ModelPickerPreference,
   ReadFileResult,
   Repo,
   SearchResult,
@@ -269,6 +270,10 @@ export const ipc = {
     invoke<Thread>("compact_codex_thread", { threadId }),
   deleteThread: (threadId: string) => invoke<void>("delete_thread", { threadId }),
   listEngines: () => invoke<EngineInfo[]>("list_engines"),
+  getModelPickerPreferences: () =>
+    invoke<Record<string, ModelPickerPreference>>("get_model_picker_preferences"),
+  setModelPickerPreferences: (preferences: Record<string, ModelPickerPreference>) =>
+    invoke<void>("set_model_picker_preferences", { preferences }),
   engineHealth: (engineId: string) => invoke<EngineHealth>("engine_health", { engineId }),
   prewarmEngine: (engineId: string) => invoke<void>("prewarm_engine", { engineId }),
   runEngineCheck: (engineId: string, command: string) =>
