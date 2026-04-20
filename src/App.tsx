@@ -110,7 +110,9 @@ function resolveChatNotificationBody(
 export function App() {
   const loadWorkspaces = useWorkspaceStore((s) => s.loadWorkspaces);
   const workspaces = useWorkspaceStore((s) => s.workspaces);
+  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const loadEngines = useEngineStore((s) => s.load);
+  const loadModelPreferences = useEngineStore((s) => s.loadModelPreferences);
   const applyEngineRuntimeUpdate = useEngineStore((s) => s.applyRuntimeUpdate);
   const loadKeepAwake = useKeepAwakeStore((s) => s.load);
   const loadTerminalNotificationSettings = useTerminalNotificationSettingsStore((s) => s.load);
@@ -137,6 +139,13 @@ export function App() {
   useEffect(() => {
     void refreshAllThreads(workspaces.map((workspace) => workspace.id));
   }, [workspaces, refreshAllThreads]);
+
+  useEffect(() => {
+    if (!activeWorkspaceId) {
+      return;
+    }
+    void loadModelPreferences(activeWorkspaceId);
+  }, [activeWorkspaceId, loadModelPreferences]);
 
   useEffect(() => {
     const hasSessionTimer = keepAwakeSessionTimer != null;

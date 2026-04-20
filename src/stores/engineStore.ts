@@ -1,15 +1,31 @@
 import { create } from "zustand";
-import type { EngineHealth, EngineInfo, EngineRuntimeUpdatedEvent } from "../types";
+import type {
+  EngineHealth,
+  EngineInfo,
+  EngineModel,
+  EngineRuntimeUpdatedEvent,
+  ModelPreference,
+} from "../types";
 import { ipc } from "../lib/ipc";
 
 interface EngineState {
   engines: EngineInfo[];
+  activeWorkspaceId: string | null;
+  modelPreferences: Record<string, ModelPreference>;
   health: Record<string, EngineHealth>;
   healthLoading: Record<string, boolean>;
   loading: boolean;
   loadedOnce: boolean;
   error?: string;
   load: () => Promise<void>;
+  loadModelPreferences: (workspaceId: string, userId?: string | null) => Promise<void>;
+  saveModelPreference: (
+    workspaceId: string,
+    engineId: string,
+    modelId: string,
+    patch: { isFavorite: boolean; isEnabled: boolean },
+    userId?: string | null,
+  ) => Promise<void>;
   ensureHealth: (
     engineId: string,
     options?: { force?: boolean },
@@ -22,6 +38,8 @@ let pendingHealthRequests: Partial<Record<string, Promise<EngineHealth | null>>>
 
 export const useEngineStore = create<EngineState>((set, get) => ({
   engines: [],
+  activeWorkspaceId: null,
+  modelPreferences: {},
   health: {},
   healthLoading: {},
   loading: false,
@@ -29,7 +47,10 @@ export const useEngineStore = create<EngineState>((set, get) => ({
   load: async () => {
     set({ loading: true, error: undefined });
     try {
-      const engines = await ipc.listEngines();
+      const engines = applyModelPreferences(
+        await ipc.listEngines(),
+        get().modelPreferences,
+      );
       set({
         engines,
         loading: false,
@@ -54,6 +75,45 @@ export const useEngineStore = create<EngineState>((set, get) => ({
         },
       });
     }
+  },
+  loadModelPreferences: async (workspaceId, userId) => {
+    const normalizedWorkspaceId = workspaceId.trim();
+    if (!normalizedWorkspaceId) {
+      set({ activeWorkspaceId: null, modelPreferences: {} });
+      return;
+    }
+    const preferences = await ipc.getModelPreferences(normalizedWorkspaceId, userId ?? null);
+    const preferenceMap = Object.fromEntries(
+      preferences.map((value) => [modelPreferenceKey(value.engineId, value.modelId), value]),
+    );
+    set((state) => ({
+      activeWorkspaceId: normalizedWorkspaceId,
+      modelPreferences: preferenceMap,
+      engines: applyModelPreferences(state.engines, preferenceMap),
+    }));
+  },
+  saveModelPreference: async (workspaceId, engineId, modelId, patch, userId) => {
+    const preference = await ipc.saveModelPreference(
+      workspaceId,
+      engineId,
+      modelId,
+      patch.isFavorite,
+      patch.isEnabled,
+      userId ?? null,
+    );
+    set((state) => {
+      if (state.activeWorkspaceId !== workspaceId) {
+        return state;
+      }
+      const nextPreferences = {
+        ...state.modelPreferences,
+        [modelPreferenceKey(engineId, modelId)]: preference,
+      };
+      return {
+        modelPreferences: nextPreferences,
+        engines: applyModelPreferences(state.engines, nextPreferences),
+      };
+    });
   },
   ensureHealth: async (engineId, options) => {
     const existing = get().health[engineId];
@@ -161,3 +221,24 @@ export const useEngineStore = create<EngineState>((set, get) => ({
       };
     }),
 }));
+
+function modelPreferenceKey(engineId: string, modelId: string): string {
+  return `${engineId}::${modelId}`;
+}
+
+function applyModelPreferences(
+  engines: EngineInfo[],
+  preferences: Record<string, ModelPreference>,
+): EngineInfo[] {
+  return engines.map((engine) => ({
+    ...engine,
+    models: engine.models.map((model): EngineModel => {
+      const preference = preferences[modelPreferenceKey(engine.id, model.id)];
+      return {
+        ...model,
+        isFavorite: preference?.isFavorite ?? false,
+        isEnabled: preference?.isEnabled ?? true,
+      };
+    }),
+  }));
+}

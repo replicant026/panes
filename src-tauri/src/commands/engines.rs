@@ -7,10 +7,16 @@ use tokio::process::Command;
 #[cfg(not(target_os = "windows"))]
 use crate::runtime_env;
 use crate::{
-    models::{CodexAppDto, CodexSkillDto, EngineCheckResultDto, EngineHealthDto, EngineInfoDto},
+    db,
+    models::{
+        CodexAppDto, CodexSkillDto, EngineCheckResultDto, EngineHealthDto, EngineInfoDto,
+        ModelPreferenceDto,
+    },
     process_utils,
     state::AppState,
 };
+
+const DEFAULT_MODEL_PREFERENCES_USER_ID: &str = "local";
 
 #[tauri::command]
 pub async fn list_engines(state: State<'_, AppState>) -> Result<Vec<EngineInfoDto>, String> {
@@ -81,6 +87,62 @@ pub async fn run_engine_check(
         .map_err(err_to_string)
 }
 
+#[tauri::command]
+pub async fn get_model_preferences(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    user_id: Option<String>,
+) -> Result<Vec<ModelPreferenceDto>, String> {
+    let db = state.db.clone();
+    let workspace_id = workspace_id.trim().to_string();
+    if workspace_id.is_empty() {
+        return Err("workspaceId is required".to_string());
+    }
+    let user_id = normalize_user_id(user_id);
+
+    tokio::task::spawn_blocking(move || {
+        db::model_preferences::list_for_workspace_user(&db, &workspace_id, &user_id)
+            .map_err(err_to_string)
+    })
+    .await
+    .map_err(err_to_string)?
+}
+
+#[tauri::command]
+pub async fn save_model_preference(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    engine_id: String,
+    model_id: String,
+    is_favorite: bool,
+    is_enabled: bool,
+    user_id: Option<String>,
+) -> Result<ModelPreferenceDto, String> {
+    let db = state.db.clone();
+    let workspace_id = workspace_id.trim().to_string();
+    let engine_id = engine_id.trim().to_string();
+    let model_id = model_id.trim().to_string();
+    if workspace_id.is_empty() || engine_id.is_empty() || model_id.is_empty() {
+        return Err("workspaceId, engineId and modelId are required".to_string());
+    }
+    let user_id = normalize_user_id(user_id);
+
+    tokio::task::spawn_blocking(move || {
+        db::model_preferences::upsert(
+            &db,
+            &workspace_id,
+            &user_id,
+            &engine_id,
+            &model_id,
+            is_favorite,
+            is_enabled,
+        )
+        .map_err(err_to_string)
+    })
+    .await
+    .map_err(err_to_string)?
+}
+
 async fn execute_engine_check_command(command: &str) -> anyhow::Result<EngineCheckResultDto> {
     let started = Instant::now();
 
@@ -139,4 +201,13 @@ fn truncate_output(value: &str, max_chars: usize) -> String {
 
 fn err_to_string(error: impl std::fmt::Display) -> String {
     error.to_string()
+}
+
+fn normalize_user_id(raw_user_id: Option<String>) -> String {
+    raw_user_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(DEFAULT_MODEL_PREFERENCES_USER_ID)
+        .to_string()
 }

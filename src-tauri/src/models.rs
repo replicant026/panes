@@ -252,6 +252,10 @@ pub struct EngineModelDto {
     pub display_name: String,
     pub description: String,
     pub hidden: bool,
+    #[serde(default)]
+    pub is_favorite: bool,
+    #[serde(default = "default_true")]
+    pub is_enabled: bool,
     pub is_default: bool,
     pub upgrade: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -289,6 +293,22 @@ pub struct EngineModelUpgradeInfoDto {
 pub struct ReasoningEffortOptionDto {
     pub reasoning_effort: String,
     pub description: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelPreferenceDto {
+    pub workspace_id: String,
+    pub user_id: String,
+    pub engine_id: String,
+    pub model_id: String,
+    pub is_favorite: bool,
+    pub is_enabled: bool,
+    pub updated_at: String,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

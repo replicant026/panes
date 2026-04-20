@@ -1577,13 +1577,13 @@ export function ChatPanel() {
   const availableModels = useMemo(() => selectedEngine?.models ?? [], [selectedEngine]);
 
   const activeModels = useMemo(
-    () => availableModels.filter((model) => isModelActive(model)),
+    () => availableModels.filter((m) => !m.hidden && m.isEnabled !== false),
     [availableModels],
   );
   const codexReferenceRoot = activeRepo?.path ?? activeWorkspace?.rootPath ?? null;
 
   const legacyModels = useMemo(
-    () => availableModels.filter((model) => !isModelActive(model)),
+    () => availableModels.filter((m) => m.hidden && m.isEnabled !== false),
     [availableModels],
   );
 
@@ -1594,7 +1594,7 @@ export function ChatPanel() {
         .map((engine) => ({
           label: engine.name,
           options: engine.models
-            .filter((model) => isModelActive(model))
+            .filter((m) => !m.hidden && m.isEnabled !== false)
             .map((model) => ({
               value: encodeModelOptionValue(engine.id, model.id),
               label: formatEngineModelLabel(t, engine.name, model.displayName),

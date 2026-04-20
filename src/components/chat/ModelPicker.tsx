@@ -175,25 +175,14 @@ export function ModelPicker({
   const currentEngine = engines.find((e) => e.id === selectedEngineId) ?? engines[0];
   const currentModel =
     currentEngine?.models.find((m) => m.id === selectedModelId) ??
-    currentEngine?.models.find((m) => !m.hidden) ??
+    currentEngine?.models.find((m) => !m.hidden && m.isEnabled !== false) ??
     null;
 
   // Active engine in popover (for browsing)
   const browsingEngine = engines.find((e) => e.id === activeEngineId) ?? engines[0];
   const browsingModels = browsingEngine?.models ?? [];
-  const favoriteModels = browsingModels.filter((model) => (
-    !model.hidden && getModelPickerPreference(activeEngineId, model.id).favorite
-  ));
-  const regularModels = browsingModels.filter((model) => (
-    !model.hidden && !getModelPickerPreference(activeEngineId, model.id).favorite
-  ));
-  const activeModels = regularModels.filter(
-    (model) => getModelPickerPreference(activeEngineId, model.id).enabled,
-  );
-  const inactiveModels = regularModels.filter(
-    (model) => !getModelPickerPreference(activeEngineId, model.id).enabled,
-  );
-  const legacyModels = browsingModels.filter((model) => model.hidden);
+  const activeModels = browsingModels.filter((m) => !m.hidden && m.isEnabled !== false);
+  const legacyModels = browsingModels.filter((m) => m.hidden && m.isEnabled !== false);
 
   function handleModelSelect(engineId: string, modelId: string) {
     onEngineModelChange(engineId, modelId);

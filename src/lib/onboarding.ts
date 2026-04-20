@@ -40,7 +40,6 @@ interface OnboardingChatModelSelection {
   id: string;
   hidden: boolean;
   isEnabled?: boolean;
-  isFavorite?: boolean;
   isDefault: boolean;
 }
 
@@ -110,6 +109,7 @@ export function resolvePreferredOnboardingChatSelection(
     engine.models.find((candidate) => isVisible(candidate)) ??
     engine.models.find((candidate) => candidate.isFavorite) ??
     engine.models.find((candidate) => candidate.isDefault) ??
+    engine.models.find((candidate) => !candidate.hidden && candidate.isEnabled !== false) ??
     engine.models[0];
   if (!model) {
     return null;
